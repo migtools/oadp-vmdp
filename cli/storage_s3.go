@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -83,11 +84,57 @@ func (c *storageS3Flags) Connect(ctx context.Context, isCreate bool, formatVersi
 	_ = formatVersion
 
 	if isCreate && c.s3options.PointInTime != nil && !c.s3options.PointInTime.IsZero() {
-		return nil, errors.New("Cannot specify a 'point-in-time' option when creating a repository")
+		return nil, errors.New("Cannot specify a 'point-in-time' option when creating a BSL")
 	}
 
+	// OADP: Normalize prefix to include oadp-vmdp/ prefix
+	normalizedPrefix, err := normalizeOADPPrefix(c.s3options.Prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	// OADP: Do not mutate c.s3options in-place (prevents double-normalization on repeated calls).
+	// Allocate opts explicitly so its lifetime is unambiguous to readers/review tools.
+	opts := new(s3.Options)
+	*opts = c.s3options
+	opts.Prefix = normalizedPrefix
+
 	//nolint:wrapcheck
-	return s3.New(ctx, &c.s3options, isCreate)
+	return s3.New(ctx, opts, isCreate)
+}
+
+// normalizeOADPPrefix prepends "oadp-vmdp/" to the user-provided prefix.
+// This ensures OADP data is isolated within shared buckets.
+func normalizeOADPPrefix(userPrefix string) (string, error) {
+	const oadpPrefix = OADPPrefix // "oadp-vmdp/" from oadp_config.go
+
+	// OADP: Reject leading/trailing whitespace to avoid hard-to-debug prefix mismatches.
+	// Internal spaces (e.g. "my backups/") are valid in S3 keys and are allowed.
+	if strings.TrimSpace(userPrefix) != userPrefix {
+		return "", errors.New("prefix must not start or end with whitespace")
+	}
+
+	// OADP: Reject control whitespace which is almost certainly accidental.
+	if strings.ContainsAny(userPrefix, "\t\r\n") {
+		return "", errors.New("prefix must not contain control whitespace (tabs/newlines)")
+	}
+
+	// Clean up any leading slashes from user prefix
+	cleanedPrefix := strings.TrimLeft(userPrefix, "/")
+
+	// OADP: Ensure user doesn't include 'oadp-vmdp' as a path segment in their prefix.
+	// This prefix segment is automatically added.
+	for _, seg := range strings.Split(cleanedPrefix, "/") {
+		if seg == "" {
+			continue
+		}
+
+		if strings.EqualFold(seg, "oadp-vmdp") {
+			return "", errors.New("prefix must not contain 'oadp-vmdp' as a path segment - this prefix is automatically added")
+		}
+	}
+
+	return oadpPrefix + cleanedPrefix, nil
 }
 
 func init() {

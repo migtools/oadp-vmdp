@@ -20,7 +20,8 @@ type commandRepositoryConnect struct {
 }
 
 func (c *commandRepositoryConnect) setup(svc advancedAppServices, parent commandParent) {
-	cmd := parent.Command("connect", "Connect to a repository.")
+	// OADP: Updated terminology
+	cmd := parent.Command("connect", "Connect to a BSL.")
 
 	c.co.setup(svc, cmd)
 	c.server.setup(svc, cmd, &c.co)
@@ -28,7 +29,8 @@ func (c *commandRepositoryConnect) setup(svc advancedAppServices, parent command
 	for _, prov := range svc.storageProviders() {
 		// Set up 'connect' subcommand
 		f := prov.NewFlags()
-		cc := cmd.Command(prov.Name, "Connect to repository in "+prov.Description)
+		// OADP: Updated terminology
+		cc := cmd.Command(prov.Name, "Connect to BSL in "+prov.Description)
 		f.Setup(svc, cc)
 		cc.Action(func(kpc *kingpin.ParseContext) error {
 			return svc.runAppWithContext(kpc.SelectedCommand, func(ctx context.Context) error {
@@ -63,7 +65,8 @@ type connectOptions struct {
 func (c *connectOptions) setup(svc appServices, cmd *kingpin.CmdClause) {
 	// Set up flags shared between 'create' and 'connect'. Note that because those flags are used by both command
 	// we must use *Var() methods, otherwise one of the commands would always get default flag values.
-	cmd.Flag("cache-directory", "Cache directory").PlaceHolder("PATH").Envar(svc.EnvName("KOPIA_CACHE_DIRECTORY")).StringVar(&c.connectCacheDirectory)
+	// OADP: Changed from KOPIA_CACHE_DIRECTORY to OADP_CACHE_DIRECTORY
+	cmd.Flag("cache-directory", "Cache directory").PlaceHolder("PATH").Envar(svc.EnvName("OADP_CACHE_DIRECTORY")).StringVar(&c.connectCacheDirectory)
 
 	c.maxListCacheDuration = 30 * time.Second //nolint:mnd
 	c.contentCacheSizeMB = 5000
@@ -72,7 +75,8 @@ func (c *connectOptions) setup(svc appServices, cmd *kingpin.CmdClause) {
 
 	cmd.Flag("override-hostname", "Override hostname used by this repository connection").Hidden().StringVar(&c.connectHostname)
 	cmd.Flag("override-username", "Override username used by this repository connection").Hidden().StringVar(&c.connectUsername)
-	cmd.Flag("check-for-updates", "Periodically check for Kopia updates on GitHub").Default("true").Envar(svc.EnvName(checkForUpdatesEnvar)).BoolVar(&c.connectCheckForUpdates)
+	// OADP: Updated help text
+	cmd.Flag("check-for-updates", "Periodically check for OADP-VMDP updates on GitHub").Default("true").Envar(svc.EnvName(checkForUpdatesEnvar)).BoolVar(&c.connectCheckForUpdates)
 	cmd.Flag("readonly", "Make repository read-only to avoid accidental changes").BoolVar(&c.connectReadonly)
 	cmd.Flag("permissive-cache-loading", "Do not fail when loading bad cache index entries.  Repository must be opened in read-only mode").Hidden().BoolVar(&c.connectPermissiveCacheLoading)
 	cmd.Flag("description", "Human-readable description of the repository").StringVar(&c.connectDescription)
