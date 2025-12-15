@@ -1,4 +1,4 @@
-//go:build !no_extra_providers
+//go:build !oadp
 
 package sftp_test
 
