@@ -11,6 +11,92 @@ import (
 	"github.com/kopia/kopia/internal/testutil"
 )
 
+func TestNormalizeOADPPrefix(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        string
+		want      string
+		wantError bool
+	}{
+		{
+			name: "empty-prefix",
+			in:   "",
+			want: OADPPrefix,
+		},
+		{
+			name: "leading-slash-trimmed",
+			in:   "/my-prefix/",
+			want: OADPPrefix + "my-prefix/",
+		},
+		{
+			name: "internal-spaces-allowed",
+			in:   "my backups/",
+			want: OADPPrefix + "my backups/",
+		},
+		{
+			name:      "leading-whitespace-rejected",
+			in:        " my-prefix/",
+			wantError: true,
+		},
+		{
+			name:      "trailing-whitespace-rejected",
+			in:        "my-prefix/ ",
+			wantError: true,
+		},
+		{
+			name:      "tab-rejected",
+			in:        "my\tprefix/",
+			wantError: true,
+		},
+		{
+			name:      "newline-rejected",
+			in:        "my-prefix/\n",
+			wantError: true,
+		},
+		{
+			name:      "segment-oadp-vmdp-rejected",
+			in:        "oadp-vmdp/foo/",
+			wantError: true,
+		},
+		{
+			name:      "segment-oadp-vmdp-case-insensitive-rejected",
+			in:        "OADP-VMDP/foo/",
+			wantError: true,
+		},
+		{
+			name:      "segment-oadp-vmdp-in-middle-rejected",
+			in:        "foo/oadp-vmdp/bar/",
+			wantError: true,
+		},
+		{
+			name: "substring-not-a-segment-allowed",
+			in:   "my-oadp-vmdp-migration/",
+			want: OADPPrefix + "my-oadp-vmdp-migration/",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := normalizeOADPPrefix(tc.in)
+			if tc.wantError {
+				if err == nil {
+					t.Fatalf("expected error, got none (result=%q)", got)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 var (
 	fakeCertContent         = []byte("fake certificate content")
 	fakeCertContentAsBase64 = base64.StdEncoding.EncodeToString(fakeCertContent)

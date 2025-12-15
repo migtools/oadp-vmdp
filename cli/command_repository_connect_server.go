@@ -26,7 +26,8 @@ func (c *commandRepositoryConnectServer) setup(svc advancedAppServices, parent c
 	c.svc = svc
 	c.out.setup(svc)
 
-	cmd := parent.Command("server", "Connect to a repository API Server.")
+	// OADP: Updated terminology
+	cmd := parent.Command("server", "Connect to a BSL API Server.")
 	cmd.Flag("url", "Server URL").Required().StringVar(&c.connectAPIServerURL)
 	cmd.Flag("server-cert-fingerprint", "Server certificate fingerprint").StringVar(&c.connectAPIServerCertFingerprint)
 	//nolint:lll

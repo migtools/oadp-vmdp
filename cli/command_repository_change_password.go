@@ -15,8 +15,10 @@ type commandRepositoryChangePassword struct {
 }
 
 func (c *commandRepositoryChangePassword) setup(svc advancedAppServices, parent commandParent) {
-	cmd := parent.Command("change-password", "Change repository password")
-	cmd.Flag("new-password", "New password").Envar(svc.EnvName("KOPIA_NEW_PASSWORD")).StringVar(&c.newPassword)
+	// OADP: Updated terminology
+	cmd := parent.Command("change-password", "Change BSL password")
+	// OADP: Changed from KOPIA_NEW_PASSWORD to OADP_NEW_PASSWORD
+	cmd.Flag("new-password", "New password").Envar(svc.EnvName("OADP_NEW_PASSWORD")).StringVar(&c.newPassword)
 
 	c.svc = svc
 	cmd.Action(svc.directRepositoryWriteAction(c.run))
@@ -40,7 +42,8 @@ func (c *commandRepositoryChangePassword) run(ctx context.Context, rep repo.Dire
 		return errors.Wrap(err, "unable to change password")
 	}
 
-	log(ctx).Infof(`NOTE: Repository password has been changed.`)
+	// OADP: Updated terminology
+	log(ctx).Infof(`NOTE: BSL password has been changed.`)
 
 	if err := c.svc.passwordPersistenceStrategy().PersistPassword(ctx, c.svc.repositoryConfigFileName(), newPass); err != nil {
 		return errors.Wrap(err, "unable to persist password")
