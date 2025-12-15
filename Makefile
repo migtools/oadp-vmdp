@@ -1,6 +1,7 @@
 COVERAGE_PACKAGES=./repo/...,./fs/...,./snapshot/...,./cli/...,./internal/...,./notification/...
 TEST_FLAGS?=
-KOPIA_INTEGRATION_EXE=$(CURDIR)/dist/testing_$(GOOS)_$(GOARCH)/kopia.exe
+# OADP: Renamed from kopia to oadp-vmdp
+KOPIA_INTEGRATION_EXE=$(CURDIR)/dist/testing_$(GOOS)_$(GOARCH)/oadp-vmdp.exe
 TESTING_ACTION_EXE=$(CURDIR)/dist/testing_$(GOOS)_$(GOARCH)/testingaction.exe
 FIO_DOCKER_TAG=ljishen/fio
 REPEAT_TEST=1
@@ -16,24 +17,22 @@ all:
 
 include tools/tools.mk
 
-KOPIA_BUILD_TAGS=
-KOPIA_BUILD_FLAGS=-trimpath -ldflags "-s -w -X github.com/kopia/kopia/repo.BuildVersion=$(KOPIA_VERSION_NO_PREFIX) -X github.com/kopia/kopia/repo.BuildInfo=$(shell git rev-parse HEAD) -X github.com/kopia/kopia/repo.BuildGitHubRepo=$(GITHUB_REPOSITORY)"
-
-kopia_ui_embedded_exe=dist/kopia_$(GOOS)_$(GOARCH)/kopia$(exe_suffix)
+# OADP: Renamed from kopia to oadp-vmdp
+kopia_ui_embedded_exe=dist/oadp-vmdp_$(GOOS)_$(GOARCH)/oadp-vmdp$(exe_suffix)
 
 ifeq ($(GOOS),darwin)
-	# on macOS, Kopia uses universal binary that works for AMD64 and ARM64
-	kopia_ui_embedded_exe=dist/kopia_darwin_universal/kopia
+	# on macOS, uses universal binary that works for AMD64 and ARM64
+	kopia_ui_embedded_exe=dist/oadp-vmdp_darwin_universal/oadp-vmdp
 endif
 
 ifeq ($(GOOS),linux)
 
 ifeq ($(GOARCH),arm)
-	kopia_ui_embedded_exe=dist/kopia_linux_armv7l/kopia
+	kopia_ui_embedded_exe=dist/oadp-vmdp_linux_armv7l/oadp-vmdp
 endif
 
 ifeq ($(GOARCH),amd64)
-	kopia_ui_embedded_exe=dist/kopia_linux_x64/kopia
+	kopia_ui_embedded_exe=dist/oadp-vmdp_linux_x64/oadp-vmdp
 endif
 
 endif
@@ -283,17 +282,17 @@ dev-deps:
 test-with-coverage: export KOPIA_COVERAGE_TEST=1
 test-with-coverage: export TESTING_ACTION_EXE ?= $(TESTING_ACTION_EXE)
 test-with-coverage: $(gotestsum) $(TESTING_ACTION_EXE)
-	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing -count=$(REPEAT_TEST) -short -covermode=atomic -coverprofile=coverage.txt --coverpkg $(COVERAGE_PACKAGES) -timeout $(UNIT_TESTS_TIMEOUT) ./...
+	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing,oadp -count=$(REPEAT_TEST) -short -covermode=atomic -coverprofile=coverage.txt --coverpkg $(COVERAGE_PACKAGES) -timeout $(UNIT_TESTS_TIMEOUT) ./...
 
 test: GOTESTSUM_FLAGS=--format=$(GOTESTSUM_FORMAT) --no-summary=output --jsonfile=.tmp.unit-tests.json
 test: export TESTING_ACTION_EXE ?= $(TESTING_ACTION_EXE)
 test: $(gotestsum) $(TESTING_ACTION_EXE)
-	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing -count=$(REPEAT_TEST) -timeout $(UNIT_TESTS_TIMEOUT) -skip '^TestIndexBlobManagerStress$$' ./...
+	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing,oadp -count=$(REPEAT_TEST) -timeout $(UNIT_TESTS_TIMEOUT) -skip '^TestIndexBlobManagerStress$$' ./...
 	-$(gotestsum) tool slowest --jsonfile .tmp.unit-tests.json  --threshold 1000ms
 
 test-index-blob-v0: GOTESTSUM_FLAGS=--format=pkgname --no-summary=output
 test-index-blob-v0: $(gotestsum) $(TESTING_ACTION_EXE)
-	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing -count=$(REPEAT_TEST) -timeout $(UNIT_TESTS_TIMEOUT)  -run '^TestIndexBlobManagerStress$$' ./repo/content/indexblob/...
+	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing,oadp -count=$(REPEAT_TEST) -timeout $(UNIT_TESTS_TIMEOUT)  -run '^TestIndexBlobManagerStress$$' ./repo/content/indexblob/...
 
 provider-tests-deps: $(gotestsum) $(rclone) $(MINIO_MC_PATH)
 
@@ -318,10 +317,10 @@ vtest: $(gotestsum)
 	$(GO_TEST) -count=$(REPEAT_TEST) -short -v -timeout $(UNIT_TESTS_TIMEOUT) ./...
 
 build-integration-test-binary:
-	go build $(KOPIA_BUILD_FLAGS) $(INTEGRATION_TEST_RACE_FLAGS) -o $(KOPIA_INTEGRATION_EXE) -tags testing github.com/kopia/kopia
+	go build $(KOPIA_BUILD_FLAGS) $(INTEGRATION_TEST_RACE_FLAGS) -o $(KOPIA_INTEGRATION_EXE) -tags testing,oadp github.com/kopia/kopia
 
 $(TESTING_ACTION_EXE): tests/testingaction/main.go
-	go build -o $(TESTING_ACTION_EXE) -tags testing github.com/kopia/kopia/tests/testingaction
+	go build -o $(TESTING_ACTION_EXE) -tags testing,oadp github.com/kopia/kopia/tests/testingaction
 
 compat-tests: export KOPIA_CURRENT_EXE=$(CURDIR)/$(kopia_ui_embedded_exe)
 compat-tests: export KOPIA_08_EXE=$(kopia08)

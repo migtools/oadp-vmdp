@@ -13,7 +13,8 @@ type commandRepositoryDisconnect struct {
 }
 
 func (c *commandRepositoryDisconnect) setup(svc advancedAppServices, parent commandParent) {
-	cmd := parent.Command("disconnect", "Disconnect from a repository.")
+	// OADP: Updated terminology
+	cmd := parent.Command("disconnect", "Disconnect from a BSL.")
 	cmd.Action(svc.noRepositoryAction(c.run))
 
 	c.svc = svc

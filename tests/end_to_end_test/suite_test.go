@@ -1,3 +1,5 @@
+//go:build !oadp
+
 package endtoend_test
 
 import (

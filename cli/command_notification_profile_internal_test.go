@@ -1,3 +1,5 @@
+//go:build !oadp
+
 package cli
 
 import (
