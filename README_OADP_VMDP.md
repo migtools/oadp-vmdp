@@ -16,6 +16,16 @@ OADP-VMDP is built for [OpenShift Virtualization certified guest operating syste
 
 ### 1. Create a Backup Storage Location (BSL)
 
+If using aws:
+** note --endpoint w/ "s3.<region>.amazonaws.com" did not work
+
+```bash
+oadp-vmdp bsl create s3 \
+  --bucket my-backup-bucket \
+  --access-key YOUR_ACCESS_KEY \
+  --secret-access-key YOUR_SECRET_KEY
+```
+
 ```bash
 oadp-vmdp bsl create s3 \
   --bucket my-backup-bucket \
