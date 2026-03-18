@@ -125,7 +125,8 @@ $(info )
 	build-linux-amd64 build-linux-arm64 \
 	build-windows-amd64 build-windows-arm64 \
 	container-build container-build-push container-push \
-	verify checksums
+	container-download-build container-download-build-push \
+	verify checksums release-binaries
 
 # ==============================================================================
 # Default Target
@@ -336,6 +337,7 @@ else ifeq ($(CONTAINER_TOOL),podman)
 	$(CONTAINER_TOOL) push $(IMAGE):arm64-$(TAG)
 	@echo ""
 	@echo "Creating and pushing manifest..."
+	-$(CONTAINER_TOOL) rmi -f $(IMAGE_REF) 2>/dev/null || true
 	-$(CONTAINER_TOOL) manifest rm $(IMAGE_REF) 2>/dev/null || true
 	$(CONTAINER_TOOL) manifest create $(IMAGE_REF) \
 		$(IMAGE):amd64-$(TAG) \
@@ -353,6 +355,7 @@ container-push: ## Push existing container images
 ifeq ($(CONTAINER_TOOL),podman)
 	$(CONTAINER_TOOL) push $(IMAGE):amd64-$(TAG)
 	$(CONTAINER_TOOL) push $(IMAGE):arm64-$(TAG)
+	-$(CONTAINER_TOOL) rmi -f $(IMAGE_REF) 2>/dev/null || true
 	-$(CONTAINER_TOOL) manifest rm $(IMAGE_REF) 2>/dev/null || true
 	$(CONTAINER_TOOL) manifest create $(IMAGE_REF) \
 		$(IMAGE):amd64-$(TAG) \
@@ -387,3 +390,136 @@ archives: build-all ## Create tar.gz/zip archives for distribution
 	done
 	@echo "Archives created:"
 	@ls -la $(DIST_DIR)/*.tar.gz $(DIST_DIR)/*.zip 2>/dev/null || true
+
+# ==============================================================================
+# Release Binaries (used by Containerfile.download)
+# ==============================================================================
+
+release-binaries: build-all ## Copy binaries with versioned names for the download server
+	@echo "Preparing release binaries..."
+	@mkdir -p $(DIST_DIR)/release
+	@for arch in amd64 arm64; do \
+		if [ -f "$(DIST_DIR)/$(BIN)_linux_$${arch}/$(BIN)" ]; then \
+			cp $(DIST_DIR)/$(BIN)_linux_$${arch}/$(BIN) \
+				$(DIST_DIR)/release/$(BIN)_$(VERSION)_linux_$${arch}; \
+			echo "  -> $(BIN)_$(VERSION)_linux_$${arch}"; \
+		fi; \
+	done
+	@for arch in amd64 arm64; do \
+		if [ -f "$(DIST_DIR)/$(BIN)_windows_$${arch}/$(BIN).exe" ]; then \
+			cp $(DIST_DIR)/$(BIN)_windows_$${arch}/$(BIN).exe \
+				$(DIST_DIR)/release/$(BIN)_$(VERSION)_windows_$${arch}.exe; \
+			echo "  -> $(BIN)_$(VERSION)_windows_$${arch}.exe"; \
+		fi; \
+	done
+	@echo "Generating SHA256 checksums..."
+	@cd $(DIST_DIR)/release && sha256sum $(BIN)_* > sha256sum.txt
+	@cat $(DIST_DIR)/release/sha256sum.txt
+	@echo ""
+	@echo "Release binaries:"
+	@ls -la $(DIST_DIR)/release/
+
+##@ Download Server Targets
+
+# ==============================================================================
+# Download Server Container Image Settings
+# ==============================================================================
+
+DOWNLOAD_IMAGE ?= quay.io/konveyor/oadp-vmdp-binaries
+DOWNLOAD_IMAGE_REF := $(DOWNLOAD_IMAGE):$(TAG)
+
+# ==============================================================================
+# Download Server Container Build
+# ==============================================================================
+
+container-download-build: ## Build download server container image
+ifeq ($(CONTAINER_TOOL),docker)
+	@echo "Building download server container with Docker buildx..."
+	$(CONTAINER_TOOL) buildx build \
+		--platform $(CONTAINER_PLATFORMS) \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg GIT_COMMIT="$(GIT_COMMIT)" \
+		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg BUILDTAGS="$(BUILDTAGS)" \
+		-t $(DOWNLOAD_IMAGE_REF) \
+		--load \
+		-f Containerfile.download \
+		.
+else ifeq ($(CONTAINER_TOOL),podman)
+	@echo "Building download server for amd64 with Podman..."
+	$(CONTAINER_TOOL) build --arch amd64 \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg GIT_COMMIT="$(GIT_COMMIT)" \
+		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg BUILDTAGS="$(BUILDTAGS)" \
+		--build-arg TARGETOS=linux \
+		--build-arg TARGETARCH=amd64 \
+		-t $(DOWNLOAD_IMAGE):amd64-$(TAG) \
+		-f Containerfile.download \
+		.
+	@echo ""
+	@echo "Building download server for arm64 with Podman..."
+	$(CONTAINER_TOOL) build --arch arm64 \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg GIT_COMMIT="$(GIT_COMMIT)" \
+		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg BUILDTAGS="$(BUILDTAGS)" \
+		--build-arg TARGETOS=linux \
+		--build-arg TARGETARCH=arm64 \
+		-t $(DOWNLOAD_IMAGE):arm64-$(TAG) \
+		-f Containerfile.download \
+		.
+else
+	$(error No container tool found. Please install docker or podman.)
+endif
+
+container-download-build-push: ## Build and push download server container image
+ifeq ($(CONTAINER_TOOL),docker)
+	@echo "Building and pushing download server container with Docker buildx..."
+	$(CONTAINER_TOOL) buildx build \
+		--platform $(CONTAINER_PLATFORMS) \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg GIT_COMMIT="$(GIT_COMMIT)" \
+		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg BUILDTAGS="$(BUILDTAGS)" \
+		-t $(DOWNLOAD_IMAGE_REF) \
+		--push \
+		-f Containerfile.download \
+		.
+else ifeq ($(CONTAINER_TOOL),podman)
+	@echo "Building and pushing download server for amd64 with Podman..."
+	$(CONTAINER_TOOL) build --arch amd64 \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg GIT_COMMIT="$(GIT_COMMIT)" \
+		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg BUILDTAGS="$(BUILDTAGS)" \
+		--build-arg TARGETOS=linux \
+		--build-arg TARGETARCH=amd64 \
+		-t $(DOWNLOAD_IMAGE):amd64-$(TAG) \
+		-f Containerfile.download \
+		.
+	$(CONTAINER_TOOL) push $(DOWNLOAD_IMAGE):amd64-$(TAG)
+	@echo ""
+	@echo "Building and pushing download server for arm64 with Podman..."
+	$(CONTAINER_TOOL) build --arch arm64 \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg GIT_COMMIT="$(GIT_COMMIT)" \
+		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg BUILDTAGS="$(BUILDTAGS)" \
+		--build-arg TARGETOS=linux \
+		--build-arg TARGETARCH=arm64 \
+		-t $(DOWNLOAD_IMAGE):arm64-$(TAG) \
+		-f Containerfile.download \
+		.
+	$(CONTAINER_TOOL) push $(DOWNLOAD_IMAGE):arm64-$(TAG)
+	@echo ""
+	@echo "Creating and pushing download server manifest..."
+	-$(CONTAINER_TOOL) rmi -f $(DOWNLOAD_IMAGE_REF) 2>/dev/null || true
+	-$(CONTAINER_TOOL) manifest rm $(DOWNLOAD_IMAGE_REF) 2>/dev/null || true
+	$(CONTAINER_TOOL) manifest create $(DOWNLOAD_IMAGE_REF) \
+		$(DOWNLOAD_IMAGE):amd64-$(TAG) \
+		$(DOWNLOAD_IMAGE):arm64-$(TAG)
+	$(CONTAINER_TOOL) manifest push --all $(DOWNLOAD_IMAGE_REF)
+else
+	$(error No container tool found. Please install docker or podman.)
+endif

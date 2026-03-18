@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OADP VMDP Downloads</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="header">
+    <div class="container">
+      <div class="logo"><a href="https://github.com/openshift/oadp-vmdp" class="logo-link">OADP VMDP</a></div>
+      <p class="subtitle">OpenShift API for Data Protection &mdash; Virtual Machine Data Protection</p>
+      <p class="binary-note">Back up and restore data inside <code>OpenShift Virtualization</code> guest VMs to S3-compatible or filesystem storage</p>
+    </div>
+  </div>
+
+  <div class="container content">
+    {{if .LinuxFiles}}
+    <div class="section">
+      <div class="section-header">Download for Linux & Unix</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Binary</th>
+            <th>Architecture</th>
+            <th>Size</th>
+            <th>SHA256</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .LinuxFiles}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td><span class="arch-badge">{{.Arch}}</span></td>
+            <td class="size">{{printf "%.2f" .Size}} MB</td>
+            <td>{{if .Checksum}}<span class="checksum" onclick="navigator.clipboard.writeText('{{.Checksum}}')"><span class="copy-hint">Click to copy</span>{{slice .Checksum 0 16}}...</span>{{else}}&mdash;{{end}}</td>
+            <td style="text-align:right"><a class="download-btn" href="/download/{{.Name}}">Download</a></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+
+    {{if .WindowsFiles}}
+    <div class="section">
+      <div class="section-header">Download for Windows</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Binary</th>
+            <th>Architecture</th>
+            <th>Size</th>
+            <th>SHA256</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .WindowsFiles}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td><span class="arch-badge">{{.Arch}}</span></td>
+            <td class="size">{{printf "%.2f" .Size}} MB</td>
+            <td>{{if .Checksum}}<span class="checksum" onclick="navigator.clipboard.writeText('{{.Checksum}}')"><span class="copy-hint">Click to copy</span>{{slice .Checksum 0 16}}...</span>{{else}}&mdash;{{end}}</td>
+            <td style="text-align:right"><a class="download-btn" href="/download/{{.Name}}">Download</a></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+
+    <div class="install-section">
+      <h3>Installation</h3>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="showTab('linux-setup')">Linux</button>
+        <button class="tab-btn" onclick="showTab('windows-setup')">Windows</button>
+      </div>
+
+      <div id="linux-setup" class="tab-content active">
+        <div class="code-block">
+          <div class="code-line">
+            <span class="comment"># Make it executable</span>
+          </div>
+          <div class="code-line">
+            <code class="cmd">chmod +x oadp-vmdp_*_linux_*</code>
+            <button class="copy-btn" onclick="copyCmd(this)" data-cmd="chmod +x oadp-vmdp_*_linux_*">Copy</button>
+          </div>
+          <div class="code-line">
+            <span class="comment"># Move to your PATH</span>
+          </div>
+          <div class="code-line">
+            <code class="cmd">sudo mv oadp-vmdp_*_linux_* /usr/local/bin/oadp-vmdp</code>
+            <button class="copy-btn" onclick="copyCmd(this)" data-cmd="sudo mv oadp-vmdp_*_linux_* /usr/local/bin/oadp-vmdp">Copy</button>
+          </div>
+          <div class="code-line">
+            <span class="comment"># Verify it works</span>
+          </div>
+          <div class="code-line">
+            <code class="cmd">oadp-vmdp --version</code>
+            <button class="copy-btn" onclick="copyCmd(this)" data-cmd="oadp-vmdp --version">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="windows-setup" class="tab-content">
+        <div class="code-block">
+          <div class="code-line">
+            <span class="comment"># Rename the downloaded binary</span>
+          </div>
+          <div class="code-line">
+            <code class="cmd">Rename-Item oadp-vmdp_*_windows_*.exe oadp-vmdp.exe</code>
+            <button class="copy-btn" onclick="copyCmd(this)" data-cmd="Rename-Item oadp-vmdp_*_windows_*.exe oadp-vmdp.exe">Copy</button>
+          </div>
+          <div class="code-line">
+            <span class="comment"># Verify it works</span>
+          </div>
+          <div class="code-line">
+            <code class="cmd">.\oadp-vmdp.exe --version</code>
+            <button class="copy-btn" onclick="copyCmd(this)" data-cmd=".\oadp-vmdp.exe --version">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="install-section">
+      <h3>Quick Start</h3>
+      <div class="code-block">
+        <div class="code-line">
+          <span class="comment"># Connect to a backup storage location</span>
+        </div>
+        <div class="code-line">
+          <code class="cmd">oadp-vmdp bsl create s3 --bucket my-bucket --endpoint s3.example.com --access-key &lt;KEY&gt; --secret-access-key &lt;SECRET&gt;</code>
+          <button class="copy-btn" onclick="copyCmd(this)" data-cmd="oadp-vmdp bsl create s3 --bucket my-bucket --endpoint s3.example.com --access-key <KEY> --secret-access-key <SECRET>">Copy</button>
+        </div>
+        <div class="code-line">
+          <span class="comment"># Back up your data</span>
+        </div>
+        <div class="code-line">
+          <code class="cmd">oadp-vmdp backup create /path/to/data</code>
+          <button class="copy-btn" onclick="copyCmd(this)" data-cmd="oadp-vmdp backup create /path/to/data">Copy</button>
+        </div>
+        <div class="code-line">
+          <span class="comment"># Restore from a backup</span>
+        </div>
+        <div class="code-line">
+          <code class="cmd">oadp-vmdp restore /path/to/data</code>
+          <button class="copy-btn" onclick="copyCmd(this)" data-cmd="oadp-vmdp restore /path/to/data">Copy</button>
+        </div>
+        <div class="code-line">
+          <span class="comment"># See all available commands</span>
+        </div>
+        <div class="code-line">
+          <code class="cmd">oadp-vmdp --help</code>
+          <button class="copy-btn" onclick="copyCmd(this)" data-cmd="oadp-vmdp --help">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <strong>Tip:</strong> Set the <code>BSLS_PASSWORD</code> environment variable before
+      running any command to avoid the interactive password prompt &mdash; useful for
+      scripts and automation.
+    </div>
+    <script>
+    function copyCmd(btn) {
+      navigator.clipboard.writeText(btn.dataset.cmd);
+      btn.textContent = 'Copied!';
+      setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+    }
+    function showTab(id) {
+      var container = document.getElementById(id).closest('.install-section');
+      var tabs = container.querySelectorAll('.tab-content');
+      var btns = container.querySelectorAll('.tab-btn');
+      tabs.forEach(function(t) { t.classList.remove('active'); });
+      btns.forEach(function(b) { b.classList.remove('active'); });
+      document.getElementById(id).classList.add('active');
+      btns.forEach(function(b) {
+        if (b.getAttribute('onclick').indexOf(id) !== -1) {
+          b.classList.add('active');
+        }
+      });
+    }
+    </script>
+  </div>
+
+  <div class="footer">
+    <div class="container">OADP VMDP &mdash; <a href="https://github.com/openshift/oadp-operator">OpenShift API for Data Protection</a></div>
+  </div>
+</body>
+</html>
