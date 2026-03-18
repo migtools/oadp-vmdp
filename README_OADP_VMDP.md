@@ -215,6 +215,110 @@ oadp-vmdp backup create --help
 
 ---
 
+## Download Server (ConsoleCLIDownload)
+
+OADP-VMDP includes a download server that runs inside an OpenShift cluster and serves pre-built binaries for KubeVirt guest VMs. Users can download the correct binary for their VM's guest operating system directly from the OpenShift console or via HTTP.
+
+Supported guest operating systems:
+- **Red Hat Enterprise Linux** (x86_64, aarch64)
+- **Microsoft Windows** (x86_64, aarch64)
+
+Each binary is statically linked and includes a SHA256 checksum for integrity verification.
+
+This is powered by:
+- **`cmd/downloads/server.go`** - A lightweight Go HTTP server that serves the binaries from `/archives`
+- **`Containerfile.download`** - Builds all platform binaries with SHA256 checksums and packages them with the download server
+- **`.github/workflows/quay_binaries_push.yml`** - CI workflow that builds and pushes the image to `quay.io/konveyor/oadp-vmdp-binaries`
+
+### Building the Download Server Locally
+
+```bash
+# Build with Podman (builds for amd64 and arm64 container platforms)
+make -f Makefile.ubi container-download-build
+
+# Build and push
+make -f Makefile.ubi container-download-build-push \
+  DOWNLOAD_IMAGE=quay.io/youruser/oadp-vmdp-binaries TAG=dev
+```
+
+### Running the Download Server Locally
+
+The easiest way is to pull the pre-built image from Quay:
+
+```console
+$ podman run --rm -p 8080:8080 quay.io/konveyor/oadp-vmdp-binaries:latest
+```
+
+Then open http://localhost:8080 in your browser to see the download page with all available binaries and their SHA256 checksums.
+
+Alternatively, build the image from source:
+
+```console
+$ podman build \
+    --build-arg TARGETOS=linux \
+    --build-arg TARGETARCH=amd64 \
+    --build-arg VERSION=dev \
+    -t oadp-vmdp-binaries:dev \
+    -f Containerfile.download .
+
+$ podman run --rm -p 8080:8080 oadp-vmdp-binaries:dev
+```
+
+### Downloading and Verifying Binaries
+
+**Red Hat Enterprise Linux (x86_64):**
+
+```console
+$ curl -O http://localhost:8080/download/oadp-vmdp_v1.0.0_linux_amd64
+$ curl -O http://localhost:8080/download/sha256sum.txt
+$ sha256sum -c sha256sum.txt
+oadp-vmdp_v1.0.0_linux_amd64: OK
+$ chmod +x oadp-vmdp_v1.0.0_linux_amd64
+$ sudo mv oadp-vmdp_v1.0.0_linux_amd64 /usr/local/bin/oadp-vmdp
+$ oadp-vmdp --version
+```
+
+**Red Hat Enterprise Linux (aarch64):**
+
+```console
+$ curl -O http://localhost:8080/download/oadp-vmdp_v1.0.0_linux_arm64
+$ curl -O http://localhost:8080/download/sha256sum.txt
+$ sha256sum -c sha256sum.txt
+oadp-vmdp_v1.0.0_linux_arm64: OK
+$ chmod +x oadp-vmdp_v1.0.0_linux_arm64
+$ sudo mv oadp-vmdp_v1.0.0_linux_arm64 /usr/local/bin/oadp-vmdp
+$ oadp-vmdp --version
+```
+
+**Microsoft Windows (x86_64) - PowerShell:**
+
+```powershell
+PS> Invoke-WebRequest -Uri http://localhost:8080/download/oadp-vmdp_v1.0.0_windows_amd64.exe -OutFile oadp-vmdp.exe
+PS> Invoke-WebRequest -Uri http://localhost:8080/download/sha256sum.txt -OutFile sha256sum.txt
+PS> (Get-FileHash oadp-vmdp.exe -Algorithm SHA256).Hash
+PS> Select-String -Path sha256sum.txt -Pattern "windows_amd64"
+PS> .\oadp-vmdp.exe --version
+```
+
+**Microsoft Windows (aarch64) - PowerShell:**
+
+```powershell
+PS> Invoke-WebRequest -Uri http://localhost:8080/download/oadp-vmdp_v1.0.0_windows_arm64.exe -OutFile oadp-vmdp.exe
+PS> Invoke-WebRequest -Uri http://localhost:8080/download/sha256sum.txt -OutFile sha256sum.txt
+PS> (Get-FileHash oadp-vmdp.exe -Algorithm SHA256).Hash
+PS> Select-String -Path sha256sum.txt -Pattern "windows_arm64"
+PS> .\oadp-vmdp.exe --version
+```
+
+### How It Works in OpenShift
+
+1. The OADP operator deploys the download server container (via `RELATED_IMAGE_VMDP_CLI_DOWNLOAD` env var)
+2. A `ConsoleCLIDownload` resource is created, linking to the download server's routes
+3. Users see download links in the OpenShift console and can fetch the binary matching their guest OS
+4. Each binary is statically linked and includes a SHA256 checksum - download, verify, and run
+
+---
+
 ## Kopia Compatibility
 
 OADP-VMDP is based on [Kopia](https://kopia.io) and uses the same repository format. Repositories are fully compatible between the two tools.
