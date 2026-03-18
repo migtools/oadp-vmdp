@@ -1,0 +1,107 @@
+# Copyright 2025 Red Hat Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ==============================================================================
+# OADP VM Data Protection - Download Server Container
+# ==============================================================================
+#
+# This Containerfile cross-builds oadp-vmdp binaries for all supported platforms
+# (Linux and Windows, x86_64 and arm64) and packages them with a Go download
+# server that serves the binaries for KubeVirt guest OS consumption.
+#
+# The resulting container is intended to run inside an OpenShift cluster,
+# exposing the binaries via a ConsoleCLIDownload resource so users can
+# download the correct binary for their KubeVirt VM's guest OS.
+#
+# Supported binary platforms:
+#   - linux/amd64
+#   - linux/arm64
+#   - windows/amd64
+#   - windows/arm64
+#
+
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
+
+# Version information
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+ARG BUILDTAGS=
+
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+
+COPY . .
+
+# Build oadp-vmdp binaries for all target platforms as direct executables
+# Binaries are statically linked so no archive wrapping is needed
+# SHA256 checksums are generated for integrity verification
+RUN mkdir -p /archives && \
+    for platform in linux/amd64 linux/arm64 windows/amd64 windows/arm64; do \
+        os=$(echo $platform | cut -d'/' -f1); \
+        arch=$(echo $platform | cut -d'/' -f2); \
+        if [ "$os" = "windows" ]; then \
+            out_name="oadp-vmdp_${VERSION}_${os}_${arch}.exe"; \
+        else \
+            out_name="oadp-vmdp_${VERSION}_${os}_${arch}"; \
+        fi; \
+        echo "Building oadp-vmdp for ${os}/${arch}..."; \
+        CGO_ENABLED=0 GOOS=$os GOARCH=$arch \
+            go build -trimpath -mod=mod \
+            -tags="${BUILDTAGS}" \
+            -ldflags="-s -w \
+                -X github.com/kopia/kopia/repo.BuildVersion=${VERSION} \
+                -X github.com/kopia/kopia/repo.BuildInfo=${BUILD_DATE}-${GIT_COMMIT} \
+                -X github.com/kopia/kopia/repo.BuildGitHubRepo=github.com/openshift/oadp-vmdp" \
+            -o /archives/$out_name \
+            . ; \
+    done && \
+    cd /archives && sha256sum oadp-vmdp_* > sha256sum.txt && \
+    rm -rf /root/.cache/go-build /tmp/*
+
+# Build the download server for the TARGET platform (the arch this container will run on)
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o download-server ./cmd/downloads/ && \
+    go clean -cache -modcache -testcache && \
+    rm -rf /root/.cache/go-build /go/pkg
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+
+# Version information
+ARG VERSION=dev
+
+LABEL name="oadp-vmdp-binaries" \
+      vendor="Red Hat, Inc." \
+      version="${VERSION}" \
+      summary="OADP VM Data Protection CLI Download Server" \
+      description="Serves pre-built oadp-vmdp binaries for Red Hat Enterprise Linux and Microsoft Windows (x86_64/aarch64) for KubeVirt guest OS consumption" \
+      io.k8s.display-name="OADP VM Data Protection Downloads" \
+      io.k8s.description="Download server for oadp-vmdp CLI binaries" \
+      io.openshift.tags="oadp,backup,restore,virtualization,vmdp"
+
+# Copy the pre-built binaries
+COPY --from=builder /archives /archives
+
+# Copy the download server
+COPY --from=builder /app/download-server /usr/local/bin/download-server
+
+EXPOSE 8080
+
+CMD ["/usr/local/bin/download-server"]
