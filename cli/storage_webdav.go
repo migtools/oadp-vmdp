@@ -20,8 +20,8 @@ type storageWebDAVFlags struct {
 func (c *storageWebDAVFlags) Setup(svc StorageProviderServices, cmd *kingpin.CmdClause) {
 	cmd.Flag("url", "URL of WebDAV server").Required().StringVar(&c.options.URL)
 	cmd.Flag("flat", "Use flat directory structure").BoolVar(&c.connectFlat)
-	cmd.Flag("webdav-username", "WebDAV username").Envar(svc.EnvName("KOPIA_WEBDAV_USERNAME")).StringVar(&c.options.Username)
-	cmd.Flag("webdav-password", "WebDAV password").Envar(svc.EnvName("KOPIA_WEBDAV_PASSWORD")).StringVar(&c.options.Password)
+	cmd.Flag("webdav-username", "WebDAV username").Envar(svc.EnvName("OADP_WEBDAV_USERNAME")).StringVar(&c.options.Username)
+	cmd.Flag("webdav-password", "WebDAV password").Envar(svc.EnvName("OADP_WEBDAV_PASSWORD")).StringVar(&c.options.Password)
 	cmd.Flag("list-parallelism", "Set list parallelism").Hidden().IntVar(&c.options.ListParallelism)
 	cmd.Flag("atomic-writes", "Assume WebDAV provider implements atomic writes").BoolVar(&c.options.AtomicWrites)
 
