@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"hash/fnv"
 	"io"
+	"maps"
 	"runtime"
 	"sort"
 	"sync"
@@ -18,24 +19,9 @@ const randomSuffixSize = 32 // number of random bytes to append at the end to ma
 // Builder prepares and writes content index.
 type Builder map[ID]Info
 
-// BuilderCreator is an interface for caller to add indexes to builders.
-type BuilderCreator interface {
-	Add(info Info)
-}
-
 // Clone returns a deep Clone of the Builder.
 func (b Builder) Clone() Builder {
-	if b == nil {
-		return nil
-	}
-
-	r := Builder{}
-
-	for k, v := range b {
-		r[k] = v
-	}
-
-	return r
+	return maps.Clone(b)
 }
 
 // Add adds a new entry to the builder or conditionally replaces it if the timestamp is greater.
@@ -89,11 +75,7 @@ func (b Builder) sortedContents() []*Info {
 
 	numWorkers := runtime.NumCPU()
 	for worker := range numWorkers {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			for i := range buckets {
 				if i%numWorkers == worker {
 					buck := buckets[i]
@@ -103,7 +85,7 @@ func (b Builder) sortedContents() []*Info {
 					})
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -111,7 +93,7 @@ func (b Builder) sortedContents() []*Info {
 	// Phase 3 - merge results from all buckets.
 	result := make([]*Info, 0, len(b))
 
-	for i := range len(buckets) { //nolint:intrange
+	for i := range buckets {
 		result = append(result, buckets[i]...)
 	}
 
@@ -120,7 +102,7 @@ func (b Builder) sortedContents() []*Info {
 
 // Build writes the pack index to the provided output.
 func (b Builder) Build(output io.Writer, version int) error {
-	if err := b.BuildStable(output, version); err != nil {
+	if err := b.buildStable(output, version); err != nil {
 		return err
 	}
 
@@ -137,8 +119,8 @@ func (b Builder) Build(output io.Writer, version int) error {
 	return nil
 }
 
-// BuildStable writes the pack index to the provided output.
-func (b Builder) BuildStable(output io.Writer, version int) error {
+// buildStable writes the pack index to the provided output.
+func (b Builder) buildStable(output io.Writer, version int) error {
 	return buildSortedContents(b.sortedContents(), output, version)
 }
 
@@ -215,7 +197,7 @@ func (b Builder) BuildShards(indexVersion int, stable bool, shardSize int) ([]ga
 
 		dataShardsBuf = append(dataShardsBuf, buf)
 
-		if err := s.BuildStable(buf, indexVersion); err != nil {
+		if err := s.buildStable(buf, indexVersion); err != nil {
 			closeShards()
 
 			return nil, nil, errors.Wrap(err, "error building index shard")

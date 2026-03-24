@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -42,13 +43,9 @@ func (c *commandIndexInspect) run(ctx context.Context, rep repo.DirectRepository
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		c.dumpIndexBlobEntries(output)
-	}()
+	})
 
 	err := c.runWithOutput(ctx, rep, output)
 	close(output)
@@ -109,16 +106,16 @@ func (c *commandIndexInspect) inspectAllBlobs(ctx context.Context, rep repo.Dire
 
 func (c *commandIndexInspect) dumpIndexBlobEntries(entries chan indexBlobPlusContentInfo) {
 	for ent := range entries {
+		if !c.shouldInclude(ent.contentInfo) {
+			continue
+		}
+
 		ci := ent.contentInfo
 		bm := ent.indexBlob
 
 		state := "created"
 		if ci.Deleted {
 			state = "deleted"
-		}
-
-		if !c.shouldInclude(ci) {
-			continue
 		}
 
 		c.out.printStdout("%v %v %v %v %v %v %v %v\n",
@@ -134,13 +131,7 @@ func (c *commandIndexInspect) shouldInclude(ci content.Info) bool {
 
 	contentID := ci.ContentID.String()
 
-	for _, cid := range c.contentIDs {
-		if cid == contentID {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(c.contentIDs, contentID)
 }
 
 type indexBlobPlusContentInfo struct {

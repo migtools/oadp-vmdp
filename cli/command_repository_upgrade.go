@@ -35,9 +35,9 @@ type commandRepositoryUpgrade struct {
 const (
 	experimentalWarning = `WARNING: The upgrade command is an EXPERIMENTAL feature. Please DO NOT use it, it may corrupt your repository and cause data loss.
 
-You will need to set the env variable KOPIA_UPGRADE_LOCK_ENABLED in order to use this feature.
+You will need to set the env variable OADP_UPGRADE_LOCK_ENABLED in order to use this feature.
 `
-	upgradeLockFeatureEnv         = "KOPIA_UPGRADE_LOCK_ENABLED"
+	upgradeLockFeatureEnv         = "OADP_UPGRADE_LOCK_ENABLED"
 	maxPermittedClockDriftDefault = 5 * time.Minute
 )
 
@@ -125,12 +125,12 @@ func (c *commandRepositoryUpgrade) validateAction(ctx context.Context, rep repo.
 
 	sm := rep.ContentManager().SharedManager
 
-	indexBlobInfos0, _, err := sm.IndexReaderV0().ListIndexBlobInfos(ctx)
+	indexBlobInfos0, err := sm.IndexReaderV0().ListIndexBlobInfos(ctx)
 	if err != nil {
 		return errors.Wrapf(err, "failed to list index blobs for old index")
 	}
 
-	indexBlobInfos1, _, err := sm.IndexReaderV1().ListIndexBlobInfos(ctx)
+	indexBlobInfos1, err := sm.IndexReaderV1().ListIndexBlobInfos(ctx)
 	if err != nil {
 		log(ctx).Errorf("failed to list index blobs for new index. upgrade may have failed.: %v", err)
 		return nil

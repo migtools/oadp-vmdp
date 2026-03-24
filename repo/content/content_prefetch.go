@@ -6,6 +6,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kopia/kopia/internal/blobparam"
+	"github.com/kopia/kopia/internal/contentlog"
+	"github.com/kopia/kopia/internal/contentlog/logparam"
+	"github.com/kopia/kopia/internal/contentparam"
 	"github.com/kopia/kopia/internal/gather"
 	"github.com/kopia/kopia/repo/blob"
 )
@@ -104,11 +108,7 @@ func (bm *WriteManager) PrefetchContents(ctx context.Context, contentIDs []ID, h
 	}()
 
 	for range parallelFetches {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			var tmp gather.WriteBuffer
 			defer tmp.Close()
 
@@ -116,21 +116,30 @@ func (bm *WriteManager) PrefetchContents(ctx context.Context, contentIDs []ID, h
 				switch {
 				case strings.HasPrefix(string(w.blobID), string(PackBlobIDPrefixRegular)):
 					if err := bm.contentCache.PrefetchBlob(ctx, w.blobID); err != nil {
-						bm.log.Debugw("error prefetching data blob", "blobID", w.blobID, "err", err)
+						contentlog.Log2(ctx, bm.log,
+							"error prefetching data blob",
+							blobparam.BlobID("blobID", w.blobID),
+							logparam.Error("err", err))
 					}
 				case strings.HasPrefix(string(w.blobID), string(PackBlobIDPrefixSpecial)):
 					if err := bm.metadataCache.PrefetchBlob(ctx, w.blobID); err != nil {
-						bm.log.Debugw("error prefetching metadata blob", "blobID", w.blobID, "err", err)
+						contentlog.Log2(ctx, bm.log,
+							"error prefetching metadata blob",
+							blobparam.BlobID("blobID", w.blobID),
+							logparam.Error("err", err))
 					}
 				case w.contentID != EmptyID:
 					tmp.Reset()
 
 					if _, err := bm.getContentDataAndInfo(ctx, w.contentID, &tmp); err != nil {
-						bm.log.Debugw("error prefetching content", "contentID", w.contentID, "err", err)
+						contentlog.Log2(ctx, bm.log,
+							"error prefetching content",
+							contentparam.ContentID("contentID", w.contentID),
+							logparam.Error("err", err))
 					}
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

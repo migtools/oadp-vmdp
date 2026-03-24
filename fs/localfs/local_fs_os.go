@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 
@@ -14,9 +13,12 @@ import (
 	"github.com/kopia/kopia/fs"
 )
 
+const separatorStr = string(filepath.Separator)
+
 type filesystemDirectoryIterator struct {
 	dirHandle   *os.File
 	childPrefix string
+	options     *Options
 
 	currentIndex int
 	currentBatch []os.DirEntry
@@ -44,7 +46,7 @@ func (it *filesystemDirectoryIterator) Next(_ context.Context) (fs.Entry, error)
 		n := it.currentIndex
 		it.currentIndex++
 
-		e, err := toDirEntryOrNil(it.currentBatch[n], it.childPrefix)
+		e, err := toDirEntryOrNil(it.currentBatch[n], it.childPrefix, it.options)
 		if err != nil {
 			// stop iteration
 			return nil, err
@@ -66,14 +68,14 @@ func (it *filesystemDirectoryIterator) Close() {
 func (fsd *filesystemDirectory) Iterate(_ context.Context) (fs.DirectoryIterator, error) {
 	fullPath := fsd.fullPath()
 
-	f, direrr := os.Open(fullPath) //nolint:gosec
-	if direrr != nil {
-		return nil, errors.Wrap(direrr, "unable to read directory")
+	d, err := os.Open(fullPath + trailingSeparator(fsd)) //nolint:gosec
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to read directory")
 	}
 
-	childPrefix := fullPath + string(filepath.Separator)
+	childPrefix := fullPath + separatorStr
 
-	return &filesystemDirectoryIterator{dirHandle: f, childPrefix: childPrefix}, nil
+	return &filesystemDirectoryIterator{dirHandle: d, childPrefix: childPrefix, options: fsd.options}, nil
 }
 
 func (fsd *filesystemDirectory) Child(_ context.Context, name string) (fs.Entry, error) {
@@ -88,10 +90,10 @@ func (fsd *filesystemDirectory) Child(_ context.Context, name string) (fs.Entry,
 		return nil, errors.Wrap(err, "unable to get child")
 	}
 
-	return entryFromDirEntry(name, st, fullPath+string(filepath.Separator)), nil
+	return entryFromDirEntry(name, st, fullPath+separatorStr, fsd.options), nil
 }
 
-func toDirEntryOrNil(dirEntry os.DirEntry, prefix string) (fs.Entry, error) {
+func toDirEntryOrNil(dirEntry os.DirEntry, prefix string, options *Options) (fs.Entry, error) {
 	n := dirEntry.Name()
 
 	fi, err := os.Lstat(prefix + n)
@@ -100,19 +102,27 @@ func toDirEntryOrNil(dirEntry os.DirEntry, prefix string) (fs.Entry, error) {
 			return nil, nil
 		}
 
+		if options != nil && options.IgnoreUnreadableDirEntries {
+			return nil, nil
+		}
+
 		return nil, errors.Wrap(err, "error reading directory")
 	}
 
-	return entryFromDirEntry(n, fi, prefix), nil
-}
-
-func isWindows() bool {
-	return runtime.GOOS == "windows"
+	return entryFromDirEntry(n, fi, prefix, options), nil
 }
 
 // NewEntry returns fs.Entry for the specified path, the result will be one of supported entry types: fs.File, fs.Directory, fs.Symlink
 // or fs.UnsupportedEntry.
+// It uses DefaultOptions for configuration.
 func NewEntry(path string) (fs.Entry, error) {
+	return NewEntryWithOptions(path, DefaultOptions)
+}
+
+// NewEntryWithOptions returns fs.Entry for the specified path, the result will be one of supported entry types: fs.File, fs.Directory, fs.Symlink
+// or fs.UnsupportedEntry.
+// It uses the provided Options for configuration.
+func NewEntryWithOptions(path string, options *Options) (fs.Entry, error) {
 	path = filepath.Clean(path)
 
 	fi, err := os.Lstat(path)
@@ -121,10 +131,10 @@ func NewEntry(path string) (fs.Entry, error) {
 		// cause os.Lstat to fail with "Incorrect function" error unless they
 		// end with a separator. Retry the operation with the separator added.
 		var e syscall.Errno
-		if isWindows() &&
-			!strings.HasSuffix(path, string(filepath.Separator)) &&
+		if isWindows &&
+			!strings.HasSuffix(path, separatorStr) &&
 			errors.As(err, &e) && e == 1 {
-			fi, err = os.Lstat(path + string(filepath.Separator))
+			fi, err = os.Lstat(path + separatorStr)
 		}
 
 		if err != nil {
@@ -133,42 +143,42 @@ func NewEntry(path string) (fs.Entry, error) {
 	}
 
 	if path == "/" {
-		return entryFromDirEntry("/", fi, ""), nil
+		return entryFromDirEntry("/", fi, "", options), nil
 	}
 
 	basename, prefix := splitDirPrefix(path)
 
-	return entryFromDirEntry(basename, fi, prefix), nil
+	return entryFromDirEntry(basename, fi, prefix, options), nil
 }
 
-func entryFromDirEntry(basename string, fi os.FileInfo, prefix string) fs.Entry {
+func entryFromDirEntry(basename string, fi os.FileInfo, prefix string, options *Options) fs.Entry {
 	isplaceholder := strings.HasSuffix(basename, ShallowEntrySuffix)
 	maskedmode := fi.Mode() & os.ModeType
 
 	switch {
 	case maskedmode == os.ModeDir && !isplaceholder:
-		return newFilesystemDirectory(newEntry(basename, fi, prefix))
+		return newFilesystemDirectory(newEntry(basename, fi, prefix, options))
 
 	case maskedmode == os.ModeDir && isplaceholder:
-		return newShallowFilesystemDirectory(newEntry(basename, fi, prefix))
+		return newShallowFilesystemDirectory(newEntry(basename, fi, prefix, options))
 
 	case maskedmode == os.ModeSymlink && !isplaceholder:
-		return newFilesystemSymlink(newEntry(basename, fi, prefix))
+		return newFilesystemSymlink(newEntry(basename, fi, prefix, options))
 
 	case maskedmode == 0 && !isplaceholder:
-		return newFilesystemFile(newEntry(basename, fi, prefix))
+		return newFilesystemFile(newEntry(basename, fi, prefix, options))
 
 	case maskedmode == 0 && isplaceholder:
-		return newShallowFilesystemFile(newEntry(basename, fi, prefix))
+		return newShallowFilesystemFile(newEntry(basename, fi, prefix, options))
 
 	default:
-		return newFilesystemErrorEntry(newEntry(basename, fi, prefix), fs.ErrUnknown)
+		return newFilesystemErrorEntry(newEntry(basename, fi, prefix, options), fs.ErrUnknown)
 	}
 }
 
 var _ os.FileInfo = (*filesystemEntry)(nil)
 
-func newEntry(basename string, fi os.FileInfo, prefix string) filesystemEntry {
+func newEntry(basename string, fi os.FileInfo, prefix string, options *Options) filesystemEntry {
 	return filesystemEntry{
 		TrimShallowSuffix(basename),
 		fi.Size(),
@@ -177,5 +187,6 @@ func newEntry(basename string, fi os.FileInfo, prefix string) filesystemEntry {
 		platformSpecificOwnerInfo(fi),
 		platformSpecificDeviceInfo(fi),
 		prefix,
+		options,
 	}
 }

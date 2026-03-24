@@ -1,0 +1,23 @@
+name: Race Detector
+on:
+  pull_request:
+  push:
+    branches: [ master ]
+concurrency: 
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      with:
+        fetch-depth: 0
+    - name: Set up Go
+      uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+      with:
+        go-version-file: 'go.mod'
+    - name: Unit Tests
+      run: make -j2 test UNIT_TEST_RACE_FLAGS=-race UNIT_TESTS_TIMEOUT=1200s

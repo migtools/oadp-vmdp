@@ -4,6 +4,7 @@ package endtoend_test
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,9 +49,7 @@ func TestAutoUpdateEnableTest(t *testing.T) {
 				"repo", "create", "filesystem", "--path", e.RepoDir,
 			}, tc.extraArgs...)
 
-			for k, v := range tc.extraEnv {
-				e.Environment[k] = v
-			}
+			maps.Copy(e.Environment, tc.extraEnv)
 
 			e.RunAndExpectSuccess(t, args...)
 
