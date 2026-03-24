@@ -184,7 +184,7 @@ type App struct {
 }
 
 func (c *App) enableTestOnlyFlags() bool {
-	return c.isInProcessTest || os.Getenv("KOPIA_TESTONLY_FLAGS") != ""
+	return c.isInProcessTest || os.Getenv("OADP_TESTONLY_FLAGS") != ""
 }
 
 func (c *App) getProgress() *cliProgress {
