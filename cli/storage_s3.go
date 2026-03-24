@@ -124,7 +124,7 @@ func normalizeOADPPrefix(userPrefix string) (string, error) {
 
 	// OADP: Ensure user doesn't include 'oadp-vmdp' as a path segment in their prefix.
 	// This prefix segment is automatically added.
-	for _, seg := range strings.Split(cleanedPrefix, "/") {
+	for seg := range strings.SplitSeq(cleanedPrefix, "/") {
 		if seg == "" {
 			continue
 		}

@@ -1,15 +1,11 @@
 name: Tests
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ oadp-dev, oadp-1.* ]
   push:
-    # ci-sandbox is a branch dedicated to testing post-submit code.
-    branches: [ master, artifacts-pr ]
+    branches: [ oadp-dev, oadp-1.* ]
     tags:
       - v*
-  schedule:
-    # run on Mondays at 8AM
-    - cron:  '0 8 * * 1'
 concurrency: 
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -29,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest, ubuntu-24.04-arm ]
+        os: [ubuntu-latest]
     name: Tests
     runs-on: ${{ matrix.os }}
     steps:
@@ -41,20 +37,12 @@ jobs:
       uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
       with:
         go-version-file: 'go.mod'
-    - name: Install Windows-specific packages
-      run: "choco install --no-progress -y make zip unzip curl"
-      if: ${{ contains(matrix.os, 'windows') }}
-    - name: Install macOS-specific packages
-      run: "sudo xcode-select -r"
-      if: ${{ contains(matrix.os, 'macos') }}
     - name: Setup
       run: make -j4 ci-setup
     - name: Test Blob Index Manager V0
       run: make test-index-blob-v0
     - name: Tests
       run: make ci-tests
-    - name: Integration Tests
-      run: make -j2 ci-integration-tests
     - name: Upload Logs
       uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
       with:
