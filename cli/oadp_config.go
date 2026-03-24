@@ -1,6 +1,3 @@
-// Package cli implements command-line commands for OADP VM Data Protection.
-//
-// Centralizes all OADP-specific customizations to simplify upstream rebases
 package cli
 
 // OADP-VMDP Branding Constants.
