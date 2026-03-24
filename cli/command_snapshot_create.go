@@ -62,8 +62,7 @@ func (c *commandSnapshotCreate) setup(svc appServices, parent commandParent) {
 	cmd.Flag("upload-limit-mb", "Stop the backup process after the specified amount of data (in MB) has been uploaded.").PlaceHolder("MB").Default("0").Int64Var(&c.snapshotCreateCheckpointUploadLimitMB)
 	cmd.Flag("checkpoint-interval", "Interval between periodic checkpoints (must be <= 45 minutes).").Hidden().DurationVar(&c.snapshotCreateCheckpointInterval)
 	cmd.Flag("description", "Free-form snapshot description.").StringVar(&c.snapshotCreateDescription)
-	// OADP: Changed from KOPIA_SNAPSHOT_FAIL_FAST to OADP_BACKUP_FAIL_FAST
-	cmd.Flag("fail-fast", "Fail fast when creating backup.").Envar(svc.EnvName("OADP_BACKUP_FAIL_FAST")).BoolVar(&c.snapshotCreateFailFast)
+	cmd.Flag("fail-fast", "Fail fast when creating snapshot.").Envar(svc.EnvName("KOPIA_SNAPSHOT_FAIL_FAST")).BoolVar(&c.snapshotCreateFailFast)
 	cmd.Flag("force-hash", "Force hashing of source files for a given percentage of files [0.0 .. 100.0]").Default("0").Float64Var(&c.snapshotCreateForceHash)
 	cmd.Flag("parallel", "Upload N files in parallel").PlaceHolder("N").Default("0").IntVar(&c.snapshotCreateParallelUploads)
 	cmd.Flag("start-time", "Override snapshot start timestamp.").StringVar(&c.snapshotCreateStartTime)
@@ -500,7 +499,6 @@ func (c *commandSnapshotCreate) getContentToSnapshot(ctx context.Context, dir st
 
 func parseFullSource(str, hostname, username string) (snapshot.SourceInfo, error) {
 	sourceInfo, err := snapshot.ParseSourceInfo(str, hostname, username)
-
 	if err != nil {
 		return snapshot.SourceInfo{}, errors.Wrapf(err, "not a valid source %v", str)
 	} else if sourceInfo.Host == "" || sourceInfo.UserName == "" || sourceInfo.Path == "" {

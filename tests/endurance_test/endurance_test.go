@@ -1,5 +1,3 @@
-//go:build !oadp
-
 package endurance_test
 
 import (
@@ -147,7 +145,7 @@ func actionSnapshotExisting(t *testing.T, e *testenv.CLITest, s *runnerState) {
 	t.Helper()
 
 	randomPath := s.dirs[rand.Intn(len(s.dirs))]
-	e.RunAndExpectSuccess(t, "snapshot", "create", randomPath)
+	e.RunAndExpectSuccess(t, "--no-auto-maintenance", "snapshot", "create", randomPath)
 
 	s.snapshottedAnything = true
 }
@@ -159,7 +157,7 @@ func actionSnapshotAll(t *testing.T, e *testenv.CLITest, s *runnerState) {
 		return
 	}
 
-	e.RunAndExpectSuccess(t, "snapshot", "create", "--all")
+	e.RunAndExpectSuccess(t, "--no-auto-maintenance", "snapshot", "create", "--all")
 }
 
 func actionSnapshotVerify(t *testing.T, e *testenv.CLITest, s *runnerState) {

@@ -27,11 +27,11 @@ type CLIInProcRunner struct {
 }
 
 // Start implements CLIRunner.
-func (e *CLIInProcRunner) Start(t *testing.T, ctx context.Context, args []string, env map[string]string) (stdout, stderr io.Reader, wait func() error, interrupt func(os.Signal)) {
-	t.Helper()
+func (e *CLIInProcRunner) Start(tb testing.TB, ctx context.Context, args []string, env map[string]string) (stdout, stderr io.Reader, wait func() error, interrupt func(os.Signal)) {
+	tb.Helper()
 
 	a := cli.NewApp()
-	a.AdvancedCommands = "enabled"
+	a.DangerousCommands = "enabled"
 
 	envPrefix := fmt.Sprintf("T%v_", atomic.AddInt32(envPrefixCounter, 1))
 	a.SetEnvNamePrefixForTesting(envPrefix)

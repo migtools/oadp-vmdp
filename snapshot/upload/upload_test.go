@@ -78,7 +78,7 @@ func newUploadTestHarness(ctx context.Context, t *testing.T) *uploadTestHarness 
 	require.NoError(t, err, "cannot create storage directory")
 
 	faulty := blobtesting.NewFaultyStorage(storage)
-	logged := bloblogging.NewWrapper(faulty, testlogging.Printf(t.Logf, "{STORAGE} "), "")
+	logged := bloblogging.NewWrapper(faulty, testlogging.Printf(t.Logf, "{STORAGE} "), nil, "")
 	rec := repotesting.NewReconnectableStorage(t, logged)
 
 	err = repo.Initialize(ctx, rec, &repo.NewRepositoryOptions{}, masterPassword)
@@ -1109,6 +1109,7 @@ func (w *mockLogger) Write(p []byte) (int, error) {
 	parts := strings.SplitN(strings.TrimSpace(string(p)), "\t", 2)
 
 	var la loggedAction
+
 	la.msg = parts[0]
 
 	if len(parts) == 2 {

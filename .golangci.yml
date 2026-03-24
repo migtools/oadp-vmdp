@@ -80,9 +80,15 @@ linters:
         - (*go.uber.org/zap.SugaredLogger).With
     misspell:
       locale: US
+    modernize:
+      disable:
+        - omitzero
+    wsl_v5:
+      allow-whole-block: true
 
   default: all
   disable:
+    - embeddedstructfieldcheck
     - exhaustruct
     - funcorder
     - gochecknoglobals
@@ -91,8 +97,10 @@ linters:
     - importas
     - ireturn # this one may be interesting to control allocations
     - musttag
+    - nakedret # already enforced by gofumpt in a stricter manner
     - nilnil
-    - nlreturn
+    - nlreturn # already enforced by wsl_v5
+    - noinlineerr # inline error handling is a common Go idiom used in this codebase
     - nonamedreturns
     - paralleltest
     - prealloc
@@ -106,84 +114,12 @@ linters:
     - usetesting
     - varnamelen # this one may be interesting, but too much churn
     - whitespace
+    - wsl
     - zerologlint # zerolog not currently used in the codebase
 
   exclusions:
     generated: lax
     rules:
-      # OADP: Exclude unused code from commands not included in oadp-vmdp CLI
-      # These commands are intentionally not wired up in the CLI but kept for easier rebasing
-      # Prefer broad regex patterns over per-file lists to reduce rebase churn.
-      - path: cli/command_(acl|benchmark|maintenance|mount|notification|policy|server|user).*\.go
-        linters:
-          - unused
-      - path: cli/command_(diff|ls)\.go
-        linters:
-          - unused
-      - path: cli/command_repository_(connect_from_config|repair|set_client|set_parameters|sync|throttle|upgrade|validate_provider)\.go
-        linters:
-          - unused
-      - path: cli/command_repository_throttle.*\.go
-        linters:
-          - unused
-      - path: cli/command_snapshot_(copy_move_history|estimate|expire|fix|migrate|pin|verify).*\.go
-        linters:
-          - unused
-      - path: cli/storage_(azure|b2|gcs|gdrive|rclone|sftp|webdav)\.go
-        linters:
-          - unused
-      - path: cli/throttle_(get|set)\.go
-        linters:
-          - unused
-      - path: cli/sighup_unix\.go
-        linters:
-          - unused
-      - path: cli/show_utils\.go
-        text: "(indentMultilineString|maybeHumanReadableCount|formatTimestampPrecise) is unused"
-        linters:
-          - unused
-      - path: cli/config\.go
-        text: "isWindows is unused"
-        linters:
-          - unused
-      # OADP: Exclude unused helper functions and command trees that are intentionally not wired up
-      # (kept in-tree to simplify rebases).
-      - path: cli/app\.go
-        text: "func safetyFlagVar is unused"
-        linters:
-          - unused
-      - path: cli/command_blob.*\.go
-        linters:
-          - unused
-      - path: cli/command_content.*\.go
-        linters:
-          - unused
-      - path: cli/command_index.*\.go
-        linters:
-          - unused
-      - path: cli/command_manifest.*\.go
-        linters:
-          - unused
-      # OADP: Exclude unused fields in structs for commands not wired up
-      - path: cli/app\.go
-        text: "field (benchmark|diff|list|server|policy|mount|maintenance|notification|blob|content|index|manifest) is unused"
-        linters:
-          - unused
-      - path: cli/command_repository\.go
-        text: "field (repair|setClient|setParameters|syncTo|throttle|validateProvider|upgrade) is unused"
-        linters:
-          - unused
-      - path: cli/command_snapshot\.go
-        text: "field (copyHistory|moveHistory|estimate|expire|fix|migrate|pin|verify) is unused"
-        linters:
-          - unused
-      # OADP: Exclude revive unused-parameter warning for azure/patch.go
-      - path: repo/blob/azure/patch\.go
-        linters:
-          - revive
-      - path: reporter.go
-        linters:
-          - musttag
       - path: _test\.go|testing|tests|test_env|fshasher|fault 
         linters:
           - contextcheck
@@ -201,12 +137,6 @@ linters:
           - perfsprint
           - revive
           - wrapcheck
-      - text: "log is a global variable"
-        linters:
-          - gochecknoglobals
-      - text: "tracer is a global variable"
-        linters:
-          - gochecknoglobals
       - text: "Magic number: 1e"
         linters:
           - mnd
@@ -261,6 +191,8 @@ formatters:
         - standard
         - default
         - localmodule
+    gofumpt:
+      extra-rules: true
 
 output:
   show-stats: false

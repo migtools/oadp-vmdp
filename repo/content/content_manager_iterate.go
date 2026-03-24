@@ -10,6 +10,9 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/kopia/kopia/internal/bigmap"
+	"github.com/kopia/kopia/internal/blobparam"
+	"github.com/kopia/kopia/internal/contentlog"
+	"github.com/kopia/kopia/internal/contentlog/logparam"
 	"github.com/kopia/kopia/repo/blob"
 	"github.com/kopia/kopia/repo/content/index"
 )
@@ -65,11 +68,7 @@ func maybeParallelExecutor(parallel int, originalCallback IterateCallback) (Iter
 	// start N workers, each fetching from the shared channel and invoking the provided callback.
 	// cleanup() must be called to for worker completion
 	for range parallel {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			for i := range workch {
 				if err := originalCallback(i); err != nil {
 					select {
@@ -78,7 +77,7 @@ func maybeParallelExecutor(parallel int, originalCallback IterateCallback) (Iter
 					}
 				}
 			}
-		}()
+		})
 	}
 
 	return callback, cleanup
@@ -204,10 +203,9 @@ func (bm *WriteManager) IteratePacks(ctx context.Context, options IteratePackOpt
 
 			pi := packUsage[ci.PackBlobID]
 			if pi == nil {
-				pi = &PackInfo{}
+				pi = &PackInfo{PackID: ci.PackBlobID}
 				packUsage[ci.PackBlobID] = pi
 			}
-			pi.PackID = ci.PackBlobID
 			pi.ContentCount++
 			pi.TotalSize += int64(ci.PackedLength)
 			if options.IncludeContentInfos {
@@ -227,8 +225,8 @@ func (bm *WriteManager) IteratePacks(ctx context.Context, options IteratePackOpt
 	return nil
 }
 
-// IterateUnreferencedBlobs returns the list of unreferenced storage blobs.
-func (bm *WriteManager) IterateUnreferencedBlobs(ctx context.Context, blobPrefixes []blob.ID, parallelism int, callback func(blob.Metadata) error) error {
+// IterateUnreferencedPacks returns the list of unreferenced storage blobs.
+func (bm *WriteManager) IterateUnreferencedPacks(ctx context.Context, blobPrefixes []blob.ID, parallelism int, callback func(blob.Metadata) error) error {
 	usedPacks, err := bigmap.NewSet(ctx)
 	if err != nil {
 		return errors.Wrap(err, "new set")
@@ -236,7 +234,7 @@ func (bm *WriteManager) IterateUnreferencedBlobs(ctx context.Context, blobPrefix
 
 	defer usedPacks.Close(ctx)
 
-	bm.log.Debug("determining blobs in use")
+	contentlog.Log(ctx, bm.log, "determining blobs in use")
 	// find packs in use
 	if err := bm.IteratePacks(
 		ctx,
@@ -252,8 +250,6 @@ func (bm *WriteManager) IterateUnreferencedBlobs(ctx context.Context, blobPrefix
 		}); err != nil {
 		return errors.Wrap(err, "error iterating packs")
 	}
-
-	unusedCount := new(int32)
 
 	if len(blobPrefixes) == 0 {
 		blobPrefixes = PackBlobIDPrefixes
@@ -272,7 +268,10 @@ func (bm *WriteManager) IterateUnreferencedBlobs(ctx context.Context, blobPrefix
 		}
 	}
 
-	bm.log.Debugf("scanning prefixes %v", prefixes)
+	contentlog.Log1(ctx, bm.log, "scanning prefixes",
+		blobparam.BlobIDList("prefixes", prefixes))
+
+	var unusedCount atomic.Int32
 
 	if err := blob.IterateAllPrefixesInParallel(ctx, parallelism, bm.st, prefixes,
 		func(bm blob.Metadata) error {
@@ -280,14 +279,14 @@ func (bm *WriteManager) IterateUnreferencedBlobs(ctx context.Context, blobPrefix
 				return nil
 			}
 
-			atomic.AddInt32(unusedCount, 1)
+			unusedCount.Add(1)
 
 			return callback(bm)
 		}); err != nil {
 		return errors.Wrap(err, "error iterating blobs")
 	}
 
-	bm.log.Debugf("found %v pack blobs not in use", *unusedCount)
+	contentlog.Log1(ctx, bm.log, "found pack blobs not in use", logparam.Int("unusedCount", int(unusedCount.Load())))
 
 	return nil
 }

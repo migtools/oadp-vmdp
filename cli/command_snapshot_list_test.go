@@ -1,5 +1,3 @@
-//go:build !oadp
-
 package cli_test
 
 import (
@@ -21,6 +19,7 @@ func TestSnapshotList(t *testing.T) {
 	e := testenv.NewCLITest(t, testenv.RepoFormatNotImportant, runner)
 
 	defer e.RunAndExpectSuccess(t, "repo", "disconnect")
+
 	e.RunAndExpectSuccess(t, "repo", "create", "filesystem", "--path", e.RepoDir)
 
 	srcdir := testutil.TempDirectory(t)
@@ -88,6 +87,7 @@ func TestSnapshotListWithSameFileInMultipleSnapshots(t *testing.T) {
 	e := testenv.NewCLITest(t, testenv.RepoFormatNotImportant, runner)
 
 	defer e.RunAndExpectSuccess(t, "repo", "disconnect")
+
 	e.RunAndExpectSuccess(t, "repo", "create", "filesystem", "--path", e.RepoDir)
 
 	srcdir := testutil.TempDirectory(t)

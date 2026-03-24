@@ -39,26 +39,15 @@ func setDefaultMaintenanceParameters(ctx context.Context, rep repo.RepositoryWri
 	p := maintenance.DefaultParams()
 	p.Owner = rep.ClientOptions().UsernameAtHost()
 
-	if dw, ok := rep.(repo.DirectRepositoryWriter); ok {
-		_, ok, err := dw.ContentReader().EpochManager(ctx)
-		if err != nil {
-			return errors.Wrap(err, "epoch manager")
-		}
-
-		if ok {
-			// disable quick maintenance cycle
-			p.QuickCycle.Enabled = false
-		}
-	}
-
 	if err := maintenance.SetParams(ctx, rep, &p); err != nil {
 		return errors.Wrap(err, "unable to set maintenance params")
 	}
 
-	// OADP: Updated maintenance notice
 	log(ctx).Infof(`
-NOTE: OADP-VMDP will perform quick maintenance of the BSL automatically every %v
+NOTE: Kopia will perform quick maintenance of the repository automatically every %v
 and full maintenance every %v when running as %v.
+
+See https://kopia.io/docs/advanced/maintenance/ for more information.
 `, p.QuickCycle.Interval, p.FullCycle.Interval, p.Owner)
 
 	return nil

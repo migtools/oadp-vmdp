@@ -1,8 +1,7 @@
-//go:build !oadp
-
 package endtoend_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -77,10 +76,8 @@ func (s *formatSpecificTestSuite) TestRepositorySetClient(t *testing.T) {
 func verifyHasLine(t *testing.T, lines []string, ok func(s string) bool) {
 	t.Helper()
 
-	for _, l := range lines {
-		if ok(l) {
-			return
-		}
+	if slices.ContainsFunc(lines, ok) {
+		return
 	}
 
 	t.Errorf("output line meeting given condition was not found")

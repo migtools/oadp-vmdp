@@ -4,6 +4,7 @@ package logfile
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -23,7 +24,6 @@ import (
 	"github.com/kopia/kopia/internal/clock"
 	"github.com/kopia/kopia/internal/ospath"
 	"github.com/kopia/kopia/internal/zaplogutil"
-	"github.com/kopia/kopia/repo/content"
 	"github.com/kopia/kopia/repo/logging"
 )
 
@@ -53,6 +53,7 @@ type loggingFlags struct {
 	consoleLogTimestamps        bool
 	waitForLogSweep             bool
 	disableFileLogging          bool
+	disableContentLogs          bool
 
 	cliApp *cli.App
 }
@@ -61,25 +62,25 @@ func (c *loggingFlags) setup(cliApp *cli.App, app *kingpin.Application) {
 	app.Flag("log-file", "Override log file.").StringVar(&c.logFile)
 	app.Flag("content-log-file", "Override content log file.").Hidden().StringVar(&c.contentLogFile)
 	app.Flag("disable-file-logging", "Disable file-based logging.").BoolVar(&c.disableFileLogging)
+	app.Flag("disable-content-log", "Disable creation of content logs.").BoolVar(&c.disableContentLogs)
 
-	// OADP: Changed KOPIA_* env vars to OADP_*
-	app.Flag("log-dir", "Directory where log files should be written.").Envar(cliApp.EnvName("OADP_LOG_DIR")).Default(ospath.LogsDir()).StringVar(&c.logDir)
-	app.Flag("log-dir-max-files", "Maximum number of log files to retain").Envar(cliApp.EnvName("OADP_LOG_DIR_MAX_FILES")).Default("1000").Hidden().IntVar(&c.logDirMaxFiles)
-	app.Flag("log-dir-max-age", "Maximum age of log files to retain").Envar(cliApp.EnvName("OADP_LOG_DIR_MAX_AGE")).Hidden().Default("720h").DurationVar(&c.logDirMaxAge)
-	app.Flag("log-dir-max-total-size-mb", "Maximum total size of log files to retain").Envar(cliApp.EnvName("OADP_LOG_DIR_MAX_SIZE_MB")).Hidden().Default("1000").Float64Var(&c.logDirMaxTotalSizeMB)
-	app.Flag("max-log-file-segment-size", "Maximum size of a single log file segment").Envar(cliApp.EnvName("OADP_LOG_FILE_MAX_SEGMENT_SIZE")).Default("50000000").Hidden().IntVar(&c.logFileMaxSegmentSize)
+	app.Flag("log-dir", "Directory where log files should be written.").Envar(cliApp.EnvName("KOPIA_LOG_DIR")).Default(ospath.LogsDir()).StringVar(&c.logDir)
+	app.Flag("log-dir-max-files", "Maximum number of log files to retain").Envar(cliApp.EnvName("KOPIA_LOG_DIR_MAX_FILES")).Default("1000").Hidden().IntVar(&c.logDirMaxFiles)
+	app.Flag("log-dir-max-age", "Maximum age of log files to retain").Envar(cliApp.EnvName("KOPIA_LOG_DIR_MAX_AGE")).Hidden().Default("720h").DurationVar(&c.logDirMaxAge)
+	app.Flag("log-dir-max-total-size-mb", "Maximum total size of log files to retain").Envar(cliApp.EnvName("KOPIA_LOG_DIR_MAX_SIZE_MB")).Hidden().Default("1000").Float64Var(&c.logDirMaxTotalSizeMB)
+	app.Flag("max-log-file-segment-size", "Maximum size of a single log file segment").Envar(cliApp.EnvName("KOPIA_LOG_FILE_MAX_SEGMENT_SIZE")).Default("50000000").Hidden().IntVar(&c.logFileMaxSegmentSize)
 	app.Flag("wait-for-log-sweep", "Wait for log sweep before program exit").Default("true").Hidden().BoolVar(&c.waitForLogSweep)
-	app.Flag("content-log-dir-max-files", "Maximum number of content log files to retain").Envar(cliApp.EnvName("OADP_CONTENT_LOG_DIR_MAX_FILES")).Default("5000").Hidden().IntVar(&c.contentLogDirMaxFiles)
-	app.Flag("content-log-dir-max-age", "Maximum age of content log files to retain").Envar(cliApp.EnvName("OADP_CONTENT_LOG_DIR_MAX_AGE")).Default("720h").Hidden().DurationVar(&c.contentLogDirMaxAge)
-	app.Flag("content-log-dir-max-total-size-mb", "Maximum total size of log files to retain").Envar(cliApp.EnvName("OADP_CONTENT_LOG_DIR_MAX_SIZE_MB")).Hidden().Default("1000").Float64Var(&c.contentLogDirMaxTotalSizeMB)
+	app.Flag("content-log-dir-max-files", "Maximum number of content log files to retain").Envar(cliApp.EnvName("KOPIA_CONTENT_LOG_DIR_MAX_FILES")).Default("5000").Hidden().IntVar(&c.contentLogDirMaxFiles)
+	app.Flag("content-log-dir-max-age", "Maximum age of content log files to retain").Envar(cliApp.EnvName("KOPIA_CONTENT_LOG_DIR_MAX_AGE")).Default("720h").Hidden().DurationVar(&c.contentLogDirMaxAge)
+	app.Flag("content-log-dir-max-total-size-mb", "Maximum total size of log files to retain").Envar(cliApp.EnvName("KOPIA_CONTENT_LOG_DIR_MAX_SIZE_MB")).Hidden().Default("1000").Float64Var(&c.contentLogDirMaxTotalSizeMB)
 	app.Flag("log-level", "Console log level").Default("info").EnumVar(&c.logLevel, logLevels...)
 	app.Flag("json-log-console", "JSON log file").Hidden().BoolVar(&c.jsonLogConsole)
 	app.Flag("json-log-file", "JSON log file").Hidden().BoolVar(&c.jsonLogFile)
 	app.Flag("file-log-level", "File log level").Default("debug").EnumVar(&c.fileLogLevel, logLevels...)
-	app.Flag("file-log-local-tz", "When logging to a file, use local timezone").Hidden().Envar(cliApp.EnvName("OADP_FILE_LOG_LOCAL_TZ")).BoolVar(&c.fileLogLocalTimezone)
-	app.Flag("force-color", "Force color output").Hidden().Envar(cliApp.EnvName("OADP_FORCE_COLOR")).BoolVar(&c.forceColor)
-	app.Flag("disable-color", "Disable color output").Hidden().Envar(cliApp.EnvName("OADP_DISABLE_COLOR")).BoolVar(&c.disableColor)
-	app.Flag("console-timestamps", "Log timestamps to stderr.").Hidden().Default("false").Envar(cliApp.EnvName("OADP_CONSOLE_TIMESTAMPS")).BoolVar(&c.consoleLogTimestamps)
+	app.Flag("file-log-local-tz", "When logging to a file, use local timezone").Default("false").Hidden().Envar(cliApp.EnvName("KOPIA_FILE_LOG_LOCAL_TZ")).BoolVar(&c.fileLogLocalTimezone)
+	app.Flag("force-color", "Force color output").Hidden().Envar(cliApp.EnvName("KOPIA_FORCE_COLOR")).BoolVar(&c.forceColor)
+	app.Flag("disable-color", "Disable color output").Hidden().Envar(cliApp.EnvName("KOPIA_DISABLE_COLOR")).BoolVar(&c.disableColor)
+	app.Flag("console-timestamps", "Log timestamps to stderr.").Hidden().Default("false").Envar(cliApp.EnvName("KOPIA_CONSOLE_TIMESTAMPS")).BoolVar(&c.consoleLogTimestamps)
 
 	app.PreAction(c.initialize)
 	c.cliApp = cliApp
@@ -91,11 +92,10 @@ func Attach(cliApp *cli.App, app *kingpin.Application) {
 	lf.setup(cliApp, app)
 }
 
-var log = logging.Module("oadp")
+var log = logging.Module("kopia")
 
 const (
-	// OADP: Changed from "kopia-" to "oadp-".
-	logFileNamePrefix = "oadp-"
+	logFileNamePrefix = "kopia-"
 	logFileNameSuffix = ".log"
 )
 
@@ -124,22 +124,15 @@ func (c *loggingFlags) initialize(ctx *kingpin.ParseContext) error {
 
 	rootLogger := zap.New(zapcore.NewTee(rootCores...), zap.WithClock(zaplogutil.Clock()))
 
-	var contentCore zapcore.Core
-	if c.disableFileLogging {
-		contentCore = c.setupConsoleCore()
-	} else {
-		contentCore = c.setupContentLogFileBackend(now, suffix)
+	var contentLogWriter io.Writer
+
+	if !c.disableFileLogging && !c.disableContentLogs {
+		contentLogWriter = c.setupLogFileBasedLogger(now, "content-logs", suffix, c.contentLogFile, c.contentLogDirMaxFiles, c.contentLogDirMaxTotalSizeMB, c.contentLogDirMaxAge)
 	}
 
-	contentLogger := zap.New(contentCore, zap.WithClock(zaplogutil.Clock())).Sugar()
-
 	c.cliApp.SetLoggerFactory(func(module string) logging.Logger {
-		if module == content.FormatLogModule {
-			return contentLogger
-		}
-
 		return rootLogger.Named(module).Sugar()
-	})
+	}, contentLogWriter)
 
 	if c.forceColor {
 		color.NoColor = false
@@ -154,7 +147,6 @@ func (c *loggingFlags) initialize(ctx *kingpin.ParseContext) error {
 
 func (c *loggingFlags) setupConsoleCore() zapcore.Core {
 	ec := zapcore.EncoderConfig{
-		LevelKey:         "l",
 		MessageKey:       "m",
 		LineEnding:       zapcore.DefaultLineEnding,
 		EncodeTime:       zapcore.RFC3339NanoTimeEncoder,
@@ -187,10 +179,11 @@ func (c *loggingFlags) setupConsoleCore() zapcore.Core {
 	if c.jsonLogConsole {
 		ec.EncodeLevel = zapcore.CapitalLevelEncoder
 
+		stec.EmitLogLevel = false
 		ec.NameKey = "n"
 		ec.EncodeName = zapcore.FullNameEncoder
 	} else {
-		stec.EmitLogLevel = true
+		stec.EmitLogLevel = false
 		stec.DoNotEmitInfoLevel = true
 		stec.ColoredLogLevel = !c.disableColor
 	}
@@ -246,15 +239,7 @@ func (c *loggingFlags) setupLogFileBasedLogger(now time.Time, subdir, suffix, lo
 		logFileBaseName: logFileBaseName,
 		symlinkName:     symlinkName,
 		maxSegmentSize:  c.logFileMaxSegmentSize,
-		startSweep: func() {
-			sweepLogWG.Add(1)
-
-			go func() {
-				defer sweepLogWG.Done()
-
-				doSweep()
-			}()
-		},
+		startSweep:      func() { sweepLogWG.Go(doSweep) },
 	}
 
 	if c.waitForLogSweep {
@@ -302,17 +287,6 @@ func (c *loggingFlags) jsonOrConsoleEncoder(ec zaplogutil.StdConsoleEncoderConfi
 	}
 
 	return zaplogutil.NewStdConsoleEncoder(ec)
-}
-
-func (c *loggingFlags) setupContentLogFileBackend(now time.Time, suffix string) zapcore.Core {
-	return zapcore.NewCore(
-		zaplogutil.NewStdConsoleEncoder(zaplogutil.StdConsoleEncoderConfig{
-			TimeLayout: zaplogutil.PreciseLayout,
-			LocalTime:  false,
-		},
-		),
-		c.setupLogFileBasedLogger(now, "content-logs", suffix, c.contentLogFile, c.contentLogDirMaxFiles, c.contentLogDirMaxTotalSizeMB, c.contentLogDirMaxAge),
-		zap.DebugLevel)
 }
 
 func shouldSweepLog(maxFiles int, maxAge time.Duration) bool {

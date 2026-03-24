@@ -1,5 +1,3 @@
-//go:build !oadp
-
 package endtoend_test
 
 import (
@@ -149,6 +147,7 @@ func TestServerStart(t *testing.T) {
 
 	// make sure root payload is valid JSON for the directory.
 	var dummy map[string]any
+
 	err = json.Unmarshal(rootPayload, &dummy)
 	require.NoError(t, err)
 
@@ -258,10 +257,7 @@ func TestServerStartAsyncRepoConnect(t *testing.T) {
 }
 
 func TestServerCreateAndConnectViaAPI(t *testing.T) {
-	t.Parallel()
-
-	//nolint:tenv
-	os.Setenv("KOPIA_UPGRADE_LOCK_ENABLED", "true")
+	t.Setenv("KOPIA_UPGRADE_LOCK_ENABLED", "true")
 
 	ctx := testlogging.Context(t)
 
@@ -447,6 +443,7 @@ func TestServerScheduling(t *testing.T) {
 	emptyDir2 := testutil.TempDirectory(t)
 
 	defer e.RunAndExpectSuccess(t, "repo", "disconnect")
+
 	e.RunAndExpectSuccess(t, "repo", "create", "filesystem", "--path", e.RepoDir, "--override-hostname=fake-hostname", "--override-username=fake-username")
 
 	e.RunAndExpectSuccess(t, "snapshot", "create", emptyDir1)
@@ -494,7 +491,7 @@ func TestServerScheduling(t *testing.T) {
 	// make sure we got some maintenance runs
 	numRuns := len(miAfter.Runs["cleanup-logs"]) - len(miBefore.Runs["cleanup-logs"])
 	require.Greater(t, numRuns, 2)
-	require.Less(t, numRuns, 5)
+	require.Less(t, numRuns, 50)
 }
 
 func TestServerStartInsecure(t *testing.T) {

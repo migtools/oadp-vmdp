@@ -125,6 +125,7 @@ type commandRestore struct {
 	restoreIncremental            bool
 	restoreDeleteExtra            bool
 	restoreIgnoreErrors           bool
+	flushFiles                    bool
 	restoreShallowAtDepth         int32
 	minSizeForPlaceholder         int32
 	snapshotTime                  string
@@ -144,8 +145,7 @@ func (c *commandRestore) setup(svc appServices, parent commandParent) {
 	cmd.Flag("overwrite-files", "Specifies whether or not to overwrite already existing files").Default("true").BoolVar(&c.restoreOverwriteFiles)
 	cmd.Flag("overwrite-symlinks", "Specifies whether or not to overwrite already existing symlinks").Default("true").BoolVar(&c.restoreOverwriteSymlinks)
 	cmd.Flag("write-sparse-files", "When doing a restore, attempt to write files sparsely-allocating the minimum amount of disk space needed.").Default("false").BoolVar(&c.restoreWriteSparseFiles)
-	// OADP: Changed from KOPIA_RESTORE_CONSISTENT_ATTRIBUTES to OADP_RESTORE_CONSISTENT_ATTRIBUTES
-	cmd.Flag("consistent-attributes", "When multiple snapshots match, fail if they have inconsistent attributes").Envar(svc.EnvName("OADP_RESTORE_CONSISTENT_ATTRIBUTES")).BoolVar(&c.restoreConsistentAttributes)
+	cmd.Flag("consistent-attributes", "When multiple snapshots match, fail if they have inconsistent attributes").Envar(svc.EnvName("KOPIA_RESTORE_CONSISTENT_ATTRIBUTES")).BoolVar(&c.restoreConsistentAttributes)
 	cmd.Flag("mode", "Override restore mode").Default(restoreModeAuto).EnumVar(&c.restoreMode, restoreModeAuto, restoreModeLocal, restoreModeZip, restoreModeZipNoCompress, restoreModeTar, restoreModeTgz)
 	cmd.Flag("parallel", "Restore parallelism (1=disable)").Default("8").IntVar(&c.restoreParallel)
 	cmd.Flag("skip-owners", "Skip owners during restore").BoolVar(&c.restoreSkipOwners)
@@ -159,6 +159,7 @@ func (c *commandRestore) setup(svc appServices, parent commandParent) {
 	cmd.Flag("shallow", "Shallow restore the directory hierarchy starting at this level (default is to deep restore the entire hierarchy.)").Int32Var(&c.restoreShallowAtDepth)
 	cmd.Flag("shallow-minsize", "When doing a shallow restore, write actual files instead of placeholders smaller than this size.").Int32Var(&c.minSizeForPlaceholder)
 	cmd.Flag("snapshot-time", "When using a path as the source, use the latest snapshot available before this date. Default is latest").Default("latest").StringVar(&c.snapshotTime)
+	cmd.Flag("flush-files", "Specifies whether or not to flush files after restore completes").Default("false").BoolVar(&c.flushFiles)
 	cmd.Action(svc.repositoryReaderAction(c.run))
 }
 
@@ -270,6 +271,7 @@ func (c *commandRestore) restoreOutput(ctx context.Context, rep repo.Repository)
 			SkipPermissions:        c.restoreSkipPermissions,
 			SkipTimes:              c.restoreSkipTimes,
 			WriteSparseFiles:       c.restoreWriteSparseFiles,
+			FlushFiles:             c.flushFiles,
 		}
 
 		if err := o.Init(ctx); err != nil {

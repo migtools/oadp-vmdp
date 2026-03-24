@@ -5,14 +5,13 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	"github.com/pkg/errors"
-
 	"github.com/kopia/kopia/internal/clock"
 	"github.com/kopia/kopia/repo/blob"
 	"github.com/kopia/kopia/repo/blob/retrying"
+	"github.com/pkg/errors"
 )
 
-// NewWithClient creates new Azure backend storage with the specified client.
+// NewWithClient creates new Azure backend storage with the specified client
 func NewWithClient(ctx context.Context, opt *Options, client *azblob.Client) (blob.Storage, error) {
 	raw := &azStorage{
 		Options:   *opt,

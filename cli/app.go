@@ -1,8 +1,9 @@
-// Package cli implements command-line commands for OADP VM Data Protection.
+// Package cli implements command-line commands for the Kopia.
 package cli
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,11 +14,9 @@ import (
 	"github.com/mattn/go-colorable"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/kopia/kopia/internal/apiclient"
 	"github.com/kopia/kopia/internal/clock"
-	"github.com/kopia/kopia/internal/gather"
 	"github.com/kopia/kopia/internal/passwordpersist"
 	"github.com/kopia/kopia/internal/releasable"
 	"github.com/kopia/kopia/notification"
@@ -30,7 +29,7 @@ import (
 	"github.com/kopia/kopia/snapshot/snapshotmaintenance"
 )
 
-var log = logging.Module("oadp/cli")
+var log = logging.Module("kopia/cli")
 
 var tracer = otel.Tracer("cli")
 
@@ -85,10 +84,9 @@ type appServices interface {
 	repositoryReaderAction(act func(ctx context.Context, rep repo.Repository) error) func(ctx *kingpin.ParseContext) error
 	repositoryWriterAction(act func(ctx context.Context, rep repo.RepositoryWriter) error) func(ctx *kingpin.ParseContext) error
 	repositoryHintAction(act func(ctx context.Context, rep repo.Repository) []string) func() []string
-	maybeRepositoryAction(act func(ctx context.Context, rep repo.Repository) error, mode repositoryAccessMode) func(ctx *kingpin.ParseContext) error
 	baseActionWithContext(act func(ctx context.Context) error) func(ctx *kingpin.ParseContext) error
 	openRepository(ctx context.Context, mustBeConnected bool) (repo.Repository, error)
-	advancedCommand()
+	dangerousCommand()
 	repositoryConfigFileName() string
 	getProgress() *cliProgress
 	getRestoreProgress() RestoreProgress
@@ -120,11 +118,10 @@ type advancedAppServices interface {
 	enableErrorNotifications() bool
 }
 
-// App contains per-invocation flags and state of OADP-VMDP CLI.
+// App contains per-invocation flags and state of Kopia CLI.
 type App struct {
 	// global flags
 	enableAutomaticMaintenance    bool
-	pf                            profileFlags
 	progress                      *cliProgress
 	restoreProgress               RestoreProgress
 	initialUpdateCheckDelay       time.Duration
@@ -135,9 +132,8 @@ type App struct {
 	traceStorage                  bool
 	keyRingEnabled                bool
 	persistCredentials            bool
-	disableInternalLog            bool
-	dumpAllocatorStats            bool
-	AdvancedCommands              string
+	disableRepositoryLog          bool
+	DangerousCommands             string
 	cliStorageProviders           []StorageProvider
 	trackReleasable               []string
 
@@ -175,15 +171,16 @@ type App struct {
 	// testability hooks
 	testonlyIgnoreMissingRequiredFeatures bool
 
-	isInProcessTest bool
-	exitWithError   func(err error) // os.Exit() with 1 or 0 based on err
-	stdinReader     io.Reader
-	stdoutWriter    io.Writer
-	stderrWriter    io.Writer
-	rootctx         context.Context //nolint:containedctx
-	loggerFactory   logging.LoggerFactory
-	simulatedCtrlC  chan bool
-	envNamePrefix   string
+	isInProcessTest  bool
+	exitWithError    func(err error) // os.Exit() with 1 or 0 based on err
+	stdinReader      io.Reader
+	stdoutWriter     io.Writer
+	stderrWriter     io.Writer
+	rootctx          context.Context //nolint:containedctx
+	loggerFactory    logging.LoggerFactory
+	contentLogWriter io.Writer
+	simulatedCtrlC   chan bool
+	envNamePrefix    string
 }
 
 func (c *App) enableTestOnlyFlags() bool {
@@ -217,8 +214,9 @@ func (c *App) Stderr() io.Writer {
 }
 
 // SetLoggerFactory sets the logger factory to be used throughout the app.
-func (c *App) SetLoggerFactory(loggerForModule logging.LoggerFactory) {
+func (c *App) SetLoggerFactory(loggerForModule logging.LoggerFactory, contentLogWriter io.Writer) {
 	c.loggerFactory = loggerForModule
+	c.contentLogWriter = contentLogWriter
 }
 
 // RegisterOnExit registers the provided function to run before app exits.
@@ -261,28 +259,30 @@ func (c *App) setup(app *kingpin.Application) {
 
 	_ = app.Flag("help-full", "Show help for all commands, including hidden").Action(func(pc *kingpin.ParseContext) error {
 		_ = app.UsageForContextWithTemplate(pc, 0, kingpin.DefaultUsageTemplate)
+
 		c.exitWithError(nil)
+
 		return nil
 	}).Bool()
 
 	app.Flag("auto-maintenance", "Automatic maintenance").Default("true").Hidden().BoolVar(&c.enableAutomaticMaintenance)
 
 	// hidden flags to control auto-update behavior.
-	app.Flag("initial-update-check-delay", "Initial delay before first time update check").Default("24h").Hidden().Envar(c.EnvName("OADP_INITIAL_UPDATE_CHECK_DELAY")).DurationVar(&c.initialUpdateCheckDelay)
-	app.Flag("update-check-interval", "Interval between update checks").Default("168h").Hidden().Envar(c.EnvName("OADP_UPDATE_CHECK_INTERVAL")).DurationVar(&c.updateCheckInterval)
-	app.Flag("update-available-notify-interval", "Interval between update notifications").Default("1h").Hidden().Envar(c.EnvName("OADP_UPDATE_NOTIFY_INTERVAL")).DurationVar(&c.updateAvailableNotifyInterval)
-	app.Flag("config-file", "Specify the config file to use").Default("repository.config").Envar(c.EnvName("OADP_CONFIG_PATH")).StringVar(&c.configPath)
+	app.Flag("initial-update-check-delay", "Initial delay before first time update check").Default("24h").Hidden().Envar(c.EnvName("KOPIA_INITIAL_UPDATE_CHECK_DELAY")).DurationVar(&c.initialUpdateCheckDelay)
+	app.Flag("update-check-interval", "Interval between update checks").Default("168h").Hidden().Envar(c.EnvName("KOPIA_UPDATE_CHECK_INTERVAL")).DurationVar(&c.updateCheckInterval)
+	app.Flag("update-available-notify-interval", "Interval between update notifications").Default("1h").Hidden().Envar(c.EnvName("KOPIA_UPDATE_NOTIFY_INTERVAL")).DurationVar(&c.updateAvailableNotifyInterval)
+	app.Flag("config-file", "Specify the config file to use").Default("repository.config").Envar(c.EnvName("KOPIA_CONFIG_PATH")).StringVar(&c.configPath)
 	app.Flag("trace-storage", "Enables tracing of storage operations.").Default("true").Hidden().BoolVar(&c.traceStorage)
 	app.Flag("timezone", "Format time according to specified time zone (local, utc, original or time zone name)").Hidden().StringVar(&timeZone)
-	app.Flag("password", "BSL password.").Envar(c.EnvName("BSLS_PASSWORD")).Short('p').StringVar(&c.password)
-	app.Flag("persist-credentials", "Persist credentials").Default("true").Envar(c.EnvName("OADP_PERSIST_CREDENTIALS_ON_CONNECT")).BoolVar(&c.persistCredentials)
-	app.Flag("disable-internal-log", "Disable internal log").Hidden().Envar(c.EnvName("OADP_DISABLE_INTERNAL_LOG")).BoolVar(&c.disableInternalLog)
-	app.Flag("track-releasable", "Enable tracking of releasable resources.").Hidden().Envar(c.EnvName("OADP_TRACK_RELEASABLE")).StringsVar(&c.trackReleasable)
-	app.Flag("dump-allocator-stats", "Dump allocator stats at the end of execution.").Hidden().Envar(c.EnvName("OADP_DUMP_ALLOCATOR_STATS")).BoolVar(&c.dumpAllocatorStats)
-	app.Flag("upgrade-owner-id", "BSL format upgrade owner-id.").Hidden().Envar(c.EnvName("OADP_BSL_UPGRADE_OWNER_ID")).StringVar(&c.upgradeOwnerID)
-	app.Flag("upgrade-no-block", "Do not block when BSL format upgrade is in progress, instead exit with a message.").Hidden().Default("false").Envar(c.EnvName("OADP_BSL_UPGRADE_NO_BLOCK")).BoolVar(&c.doNotWaitForUpgrade)
+	app.Flag("password", "Repository password.").Envar(c.EnvName("KOPIA_PASSWORD")).Short('p').StringVar(&c.password)
+	app.Flag("persist-credentials", "Persist credentials").Default("true").Envar(c.EnvName("KOPIA_PERSIST_CREDENTIALS_ON_CONNECT")).BoolVar(&c.persistCredentials)
+	app.Flag("disable-repository-log", "Disable repository log").Hidden().Envar(c.EnvName("KOPIA_DISABLE_REPOSITORY_LOG")).BoolVar(&c.disableRepositoryLog)
+	app.Flag("dangerous-commands", "Enable dangerous commands that could result in data loss and repository corruption.").Hidden().Envar(c.EnvName("KOPIA_DANGEROUS_COMMANDS")).StringVar(&c.DangerousCommands)
+	app.Flag("track-releasable", "Enable tracking of releasable resources.").Hidden().Envar(c.EnvName("KOPIA_TRACK_RELEASABLE")).StringsVar(&c.trackReleasable)
+	app.Flag("upgrade-owner-id", "Repository format upgrade owner-id.").Hidden().Envar(c.EnvName("KOPIA_REPO_UPGRADE_OWNER_ID")).StringVar(&c.upgradeOwnerID)
+	app.Flag("upgrade-no-block", "Do not block when repository format upgrade is in progress, instead exit with a message.").Hidden().Default("false").Envar(c.EnvName("KOPIA_REPO_UPGRADE_NO_BLOCK")).BoolVar(&c.doNotWaitForUpgrade)
 	app.Flag("error-notifications", "Send notification on errors").Hidden().
-		Envar(c.EnvName("OADP_SEND_ERROR_NOTIFICATIONS")).
+		Envar(c.EnvName("KOPIA_SEND_ERROR_NOTIFICATIONS")).
 		Default(errorNotificationsNonInteractive).
 		EnumVar(&c.errorNotifications, errorNotificationsAlways, errorNotificationsNever, errorNotificationsNonInteractive)
 
@@ -294,29 +294,27 @@ func (c *App) setup(app *kingpin.Application) {
 
 	c.setupOSSpecificKeychainFlags(c, app)
 
-	_ = app.Flag("caching", "Enables caching of objects (disable with --no-caching)").Default("true").Hidden().Action(
-		deprecatedFlag(c.stderrWriter, "The '--caching' flag is deprecated and has no effect, use 'oadp-vmdp cache set' instead."),
-	).Bool()
-
-	_ = app.Flag("list-caching", "Enables caching of list results (disable with --no-list-caching)").Default("true").Hidden().Action(
-		deprecatedFlag(c.stderrWriter, "The '--list-caching' flag is deprecated and has no effect, use 'oadp-vmdp cache set' instead."),
-	).Bool()
-
-	c.pf.setup(app)
 	c.progress.setup(c, app)
 
-	// OADP: Only include commands needed for VM backup/restore workflow
-	// Keep the CLI surface minimal to match supported workflows and reduce risk.
-	// NOTE: Advanced/admin command trees (blob/content/index/manifest) are intentionally
-	// not wired up here to keep future rebases simpler while preventing accidental use.
+	c.blob.setup(c, app)
+	c.benchmark.setup(c, app)
 	c.cache.setup(c, app)
+	c.content.setup(c, app)
+	c.diff.setup(c, app)
+	c.index.setup(c, app)
+	c.list.setup(c, app)
 	c.logs.setup(c, app)
+	c.notification.setup(c, app)
+	c.server.setup(c, app)
 	c.session.setup(c, app)
 	c.restore.setup(c, app)
 	c.show.setup(c, app)
-	c.snapshot.setup(c, app) // renamed to "backup" in command_snapshot.go
-	// manifest commands intentionally not wired (advanced/admin)
-	c.repository.setup(c, app) // renamed to "bsl" in command_repository.go
+	c.snapshot.setup(c, app)
+	c.manifest.setup(c, app)
+	c.policy.setup(c, app)
+	c.mount.setup(c, app)
+	c.maintenance.setup(c, app)
+	c.repository.setup(c, app)
 }
 
 // commandParent is implemented by app and commands that can have sub-commands.
@@ -328,12 +326,19 @@ type commandParent interface {
 func NewApp() *App {
 	return &App{
 		progress: &cliProgress{},
-		// OADP: Only include storage backends needed for VM users
-		// To add more backends later, uncomment or add lines here
 		cliStorageProviders: []StorageProvider{
+			{"from-config", "the provided configuration file", func() StorageFlags { return &storageFromConfigFlags{} }},
+
+			{"azure", "an Azure blob storage", func() StorageFlags { return &storageAzureFlags{} }},
+			{"b2", "a B2 bucket", func() StorageFlags { return &storageB2Flags{} }},
 			{"filesystem", "a filesystem", func() StorageFlags { return &storageFilesystemFlags{} }},
+			{"gcs", "a Google Cloud Storage bucket", func() StorageFlags { return &storageGCSFlags{} }},
+			{"gdrive", "a Google Drive folder", func() StorageFlags { return &storageGDriveFlags{} }},
+
+			{"rclone", "a rclone-based provided", func() StorageFlags { return &storageRcloneFlags{} }},
 			{"s3", "an S3 bucket", func() StorageFlags { return &storageS3Flags{} }},
-			// Removed: from-config, azure, b2, gcs, gdrive, rclone, sftp, webdav
+			{"sftp", "an SFTP storage", func() StorageFlags { return &storageSFTPFlags{} }},
+			{"webdav", "a WebDAV storage", func() StorageFlags { return &storageWebDAVFlags{} }},
 		},
 
 		// testability hooks
@@ -395,15 +400,7 @@ func (c *App) currentActionName() string {
 
 func (c *App) noRepositoryAction(act func(ctx context.Context) error) func(ctx *kingpin.ParseContext) error {
 	return func(kpc *kingpin.ParseContext) error {
-		return c.runAppWithContext(kpc.SelectedCommand, func(ctx context.Context) error {
-			return c.pf.withProfiling(func() error {
-				if c.dumpAllocatorStats {
-					defer gather.DumpStats(ctx)
-				}
-
-				return act(ctx)
-			})
-		})
+		return c.runAppWithContext(kpc.SelectedCommand, act)
 	}
 }
 
@@ -443,7 +440,9 @@ func assertDirectRepository(act func(ctx context.Context, rep repo.DirectReposit
 }
 
 func (c *App) directRepositoryWriteAction(act func(ctx context.Context, rep repo.DirectRepositoryWriter) error) func(ctx *kingpin.ParseContext) error {
-	return c.maybeRepositoryAction(assertDirectRepository(func(ctx context.Context, rep repo.DirectRepository) error {
+	return c.repositoryAction(assertDirectRepository(func(ctx context.Context, rep repo.DirectRepository) error {
+		rep.LogManager().Enable()
+
 		return repo.DirectWriteSession(ctx, rep, repo.WriteSessionOptions{
 			Purpose:  "cli:" + c.currentActionName(),
 			OnUpload: c.progress.UploadedBytes,
@@ -452,19 +451,19 @@ func (c *App) directRepositoryWriteAction(act func(ctx context.Context, rep repo
 }
 
 func (c *App) directRepositoryReadAction(act func(ctx context.Context, rep repo.DirectRepository) error) func(ctx *kingpin.ParseContext) error {
-	return c.maybeRepositoryAction(assertDirectRepository(func(ctx context.Context, rep repo.DirectRepository) error {
+	return c.repositoryAction(assertDirectRepository(func(ctx context.Context, rep repo.DirectRepository) error {
 		return act(ctx, rep)
 	}), repositoryAccessMode{})
 }
 
 func (c *App) repositoryReaderAction(act func(ctx context.Context, rep repo.Repository) error) func(ctx *kingpin.ParseContext) error {
-	return c.maybeRepositoryAction(func(ctx context.Context, rep repo.Repository) error {
+	return c.repositoryAction(func(ctx context.Context, rep repo.Repository) error {
 		return act(ctx, rep)
 	}, repositoryAccessMode{})
 }
 
 func (c *App) repositoryWriterAction(act func(ctx context.Context, rep repo.RepositoryWriter) error) func(ctx *kingpin.ParseContext) error {
-	return c.maybeRepositoryAction(func(ctx context.Context, rep repo.Repository) error {
+	return c.repositoryAction(func(ctx context.Context, rep repo.Repository) error {
 		return repo.WriteSession(ctx, rep, repo.WriteSessionOptions{
 			Purpose:  "cli:" + c.currentActionName(),
 			OnUpload: c.progress.UploadedBytes,
@@ -487,29 +486,18 @@ func (c *App) runAppWithContext(command *kingpin.CmdClause, cb func(ctx context.
 		releasable.EnableTracking(releasable.ItemKind(r))
 	}
 
-	if err := c.observability.startMetrics(ctx); err != nil {
-		return errors.Wrap(err, "unable to start metrics")
+	var spanName string
+
+	if command != nil {
+		spanName = command.FullCommand()
 	}
 
-	err := func() error {
-		if command == nil {
-			defer c.runOnExit()
-
-			return cb(ctx)
-		}
-
-		tctx, span := tracer.Start(ctx, command.FullCommand(), trace.WithSpanKind(trace.SpanKindClient))
-		defer span.End()
-
+	err := c.observability.run(ctx, spanName, func(ctx context.Context) error {
 		defer c.runOnExit()
 
-		return cb(tctx)
-	}()
-
-	c.observability.stopMetrics(ctx)
-
+		return cb(ctx)
+	})
 	if err != nil {
-		// print error in red
 		log(ctx).Errorf("%v", err.Error())
 		c.exitWithError(err)
 	}
@@ -530,19 +518,11 @@ type repositoryAccessMode struct {
 
 func (c *App) baseActionWithContext(act func(ctx context.Context) error) func(ctx *kingpin.ParseContext) error {
 	return func(kpc *kingpin.ParseContext) error {
-		return c.runAppWithContext(kpc.SelectedCommand, func(ctx context.Context) error {
-			return c.pf.withProfiling(func() error {
-				if c.dumpAllocatorStats {
-					defer gather.DumpStats(ctx)
-				}
-
-				return act(ctx)
-			})
-		})
+		return c.runAppWithContext(kpc.SelectedCommand, act)
 	}
 }
 
-func (c *App) maybeRepositoryAction(act func(ctx context.Context, rep repo.Repository) error, mode repositoryAccessMode) func(ctx *kingpin.ParseContext) error {
+func (c *App) repositoryAction(act func(ctx context.Context, rep repo.Repository) error, mode repositoryAccessMode) func(ctx *kingpin.ParseContext) error {
 	return c.baseActionWithContext(func(ctx context.Context) error {
 		const requireConnected = true
 
@@ -557,7 +537,7 @@ func (c *App) maybeRepositoryAction(act func(ctx context.Context, rep repo.Repos
 
 		if rep != nil && err == nil && mode.allowMaintenance {
 			if merr := c.maybeRunMaintenance(ctx, rep); merr != nil {
-				log(ctx).Errorf("error running maintenance: %v", merr)
+				err = errors.Wrap(merr, "running auto-maintenance") // surface auto-maintenance error
 			}
 		}
 
@@ -574,7 +554,7 @@ func (c *App) maybeRepositoryAction(act func(ctx context.Context, rep repo.Repos
 
 		if rep != nil {
 			if cerr := rep.Close(ctx); cerr != nil {
-				return errors.Wrap(cerr, "unable to close repository")
+				return stderrors.Join(err, errors.Wrap(cerr, "unable to close repository"))
 			}
 		}
 
@@ -635,16 +615,17 @@ func (c *App) maybeRunMaintenance(ctx context.Context, rep repo.Repository) erro
 	return errors.Wrap(err, "error running maintenance")
 }
 
-func (c *App) advancedCommand() {
-	if c.AdvancedCommands != "enabled" {
+func (c *App) dangerousCommand() {
+	if c.DangerousCommands != "enabled" {
 		_, _ = errorColor.Fprintf(c.stderrWriter, `
-This command could be dangerous or lead to BSL corruption when used improperly.
+This command is dangerous, it can corrupt the repository and result in data loss.
 
-Running this command is not needed for normal usage. Instead, most users should rely on periodic automatic maintenance.
+Running this command is not needed for using Kopia. Instead, rely on periodic repository maintenance. See https://kopia.io/docs/advanced/maintenance/ for more information.
+To run this command despite the warning, set --dangerous-commands=enabled
 
 `)
 
-		c.exitWithError(errors.New("advanced commands are disabled"))
+		c.exitWithError(errors.New("dangerous commands are disabled"))
 	}
 }
 
