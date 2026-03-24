@@ -41,7 +41,7 @@
 # Build Stage - Compile the Go binary
 # ==============================================================================
 
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 # Build arguments for cross-compilation
 ARG BUILDPLATFORM
