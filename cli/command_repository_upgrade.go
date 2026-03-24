@@ -35,9 +35,9 @@ type commandRepositoryUpgrade struct {
 const (
 	experimentalWarning = `WARNING: The upgrade command is an EXPERIMENTAL feature. Please DO NOT use it, it may corrupt your repository and cause data loss.
 
-You will need to set the env variable KOPIA_UPGRADE_LOCK_ENABLED in order to use this feature.
+You will need to set the env variable OADP_UPGRADE_LOCK_ENABLED in order to use this feature.
 `
-	upgradeLockFeatureEnv         = "KOPIA_UPGRADE_LOCK_ENABLED"
+	upgradeLockFeatureEnv         = "OADP_UPGRADE_LOCK_ENABLED"
 	maxPermittedClockDriftDefault = 5 * time.Minute
 )
 
