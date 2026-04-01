@@ -16,14 +16,15 @@ ARG BUILD_DATE=unknown
 ARG BUILDTAGS=
 
 # Build oadp-vmdp binaries for all target platforms as direct executables
+# with clean names (no version/commit hash) for direct curl/wget download.
 RUN mkdir -p /archives && \
     for platform in linux/amd64 linux/arm64 windows/amd64 windows/arm64; do \
         os=$(echo $platform | cut -d'/' -f1); \
         arch=$(echo $platform | cut -d'/' -f2); \
         if [ "$os" = "windows" ]; then \
-            out_name="oadp-vmdp_${VERSION}_${os}_${arch}.exe"; \
+            out_name="oadp-vmdp_${os}_${arch}.exe"; \
         else \
-            out_name="oadp-vmdp_${VERSION}_${os}_${arch}"; \
+            out_name="oadp-vmdp_${os}_${arch}"; \
         fi; \
         echo "Building oadp-vmdp for ${os}/${arch}..."; \
         CGO_ENABLED=0 GOOS=$os GOARCH=$arch \
@@ -35,8 +36,9 @@ RUN mkdir -p /archives && \
                 -X github.com/kopia/kopia/repo.BuildGitHubRepo=github.com/openshift/oadp-vmdp" \
             -o /archives/$out_name \
             . ; \
+        sha256sum /archives/$out_name > /archives/$out_name.sha256; \
     done && \
-    cd /archives && sha256sum oadp-vmdp_* > sha256sum.txt && \
+    cp LICENSE /archives/LICENSE && \
     rm -rf /root/.cache/go-build /tmp/*
 
 # Build the download server (FIPS-compliant)
