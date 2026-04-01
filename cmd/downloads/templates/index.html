@@ -72,6 +72,16 @@
     </div>
     {{end}}
 
+    {{if .HasLicense}}
+    <div class="section">
+      <div class="section-header">License</div>
+      <div style="padding: 0.85rem 1.25rem; display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 0.9rem;">LICENSE</span>
+        <a class="download-btn" href="/download/LICENSE">View License</a>
+      </div>
+    </div>
+    {{end}}
+
     <div class="install-section">
       <h3>Installation</h3>
 

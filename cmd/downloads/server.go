@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	checksumFile     = "sha256sum.txt"
 	binaryPrefix     = "oadp-vmdp_"
+	licenseFile      = "LICENSE"
 	bytesPerMB       = 1024 * 1024
 	minPlatformParts = 3
 	readTimeout      = 10 * time.Second
@@ -30,7 +30,7 @@ var templateFS embed.FS
 var staticFS embed.FS
 
 var (
-	archiveDir   = getEnv("ARCHIVE_DIR", "/archives")
+	binaryDir    = getEnv("ARCHIVE_DIR", "/archives")
 	port         = getEnv("PORT", "8080")
 	pageTemplate = template.Must(template.ParseFS(templateFS, "templates/index.html"))
 )
@@ -43,7 +43,7 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-type archiveFile struct {
+type binaryFile struct {
 	Name     string
 	Size     float64
 	OS       string
@@ -52,12 +52,12 @@ type archiveFile struct {
 }
 
 func main() {
-	files, err := listBinaryFiles()
+	files, err := discoverBinaries()
 	if err != nil || len(files) == 0 {
-		log.Fatal("No downloadable files found in ", archiveDir)
+		log.Fatal("No binaries found in ", binaryDir)
 	}
 
-	log.Printf("Found %d downloadable files", len(files))
+	log.Printf("Found %d binaries", len(files))
 
 	staticContent, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -69,7 +69,7 @@ func main() {
 	http.HandleFunc("/download/", downloadBinary)
 
 	log.Printf("Starting server on port %s", port)
-	log.Printf("Serving files from %s", archiveDir)
+	log.Printf("Serving binaries from %s", binaryDir)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
@@ -82,66 +82,47 @@ func main() {
 	}
 }
 
-// listBinaryFiles returns all downloadable files (excludes sha256sum.txt and .sha256 sidecars).
-func listBinaryFiles() ([]string, error) {
-	entries, err := os.ReadDir(archiveDir)
+// discoverBinaries finds oadp-vmdp binaries (excluding .sha256 and LICENSE files).
+func discoverBinaries() ([]string, error) {
+	entries, err := os.ReadDir(binaryDir)
 	if err != nil {
-		return nil, fmt.Errorf("reading archive directory: %w", err)
+		return nil, fmt.Errorf("reading binary directory: %w", err)
 	}
 
-	var files []string
+	var binaries []string
 
 	for _, e := range entries {
-		if e.IsDir() {
+		name := e.Name()
+
+		if e.IsDir() || strings.HasSuffix(name, ".sha256") || name == licenseFile {
 			continue
 		}
 
-		name := e.Name()
-
-		if strings.HasPrefix(name, binaryPrefix) &&
-			!strings.HasSuffix(name, ".sha256") &&
-			name != checksumFile {
-			files = append(files, filepath.Join(archiveDir, name))
+		if strings.HasPrefix(name, binaryPrefix) {
+			binaries = append(binaries, filepath.Join(binaryDir, name))
 		}
 	}
 
-	return files, nil
+	return binaries, nil
 }
 
-// readChecksum reads a SHA256 checksum from a .sha256 sidecar file or
-// falls back to looking up the filename in sha256sum.txt.
+// readChecksum reads a SHA256 checksum from a per-file .sha256 sidecar file.
 func readChecksum(filePath string) string {
-	// Try per-file .sha256 sidecar first (oadp-cli style).
-	data, err := os.ReadFile(filePath + ".sha256") //nolint:gosec // path is constructed from archiveDir constant
-	if err == nil {
-		fields := strings.Fields(string(data))
-		if len(fields) > 0 {
-			return fields[0]
-		}
-	}
-
-	// Fall back to sha256sum.txt.
-	sumFile := filepath.Join(filepath.Dir(filePath), checksumFile)
-
-	data, err = os.ReadFile(sumFile) //nolint:gosec // path is constructed from archiveDir constant
+	data, err := os.ReadFile(filePath + ".sha256") //nolint:gosec // path is constructed from binaryDir constant
 	if err != nil {
 		return ""
 	}
 
-	base := filepath.Base(filePath)
-
-	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 2 && fields[1] == base {
-			return fields[0]
-		}
+	fields := strings.Fields(string(data))
+	if len(fields) > 0 {
+		return fields[0]
 	}
 
 	return ""
 }
 
 // parsePlatform extracts OS and architecture from a filename like
-// oadp-vmdp_v1.0.0_linux_amd64 or oadp-vmdp_v1.0.0_windows_arm64.exe.
+// oadp-vmdp_linux_amd64 or oadp-vmdp_windows_arm64.exe.
 func parsePlatform(filename string) (string, string) {
 	name := strings.TrimSuffix(filename, ".exe")
 
@@ -154,13 +135,18 @@ func parsePlatform(filename string) (string, string) {
 }
 
 func listBinaries(w http.ResponseWriter, _ *http.Request) {
-	files, err := listBinaryFiles()
+	files, err := discoverBinaries()
 	if err != nil {
-		http.Error(w, "Error listing files", http.StatusInternalServerError)
+		http.Error(w, "Error listing binaries", http.StatusInternalServerError)
 		return
 	}
 
-	var linuxFiles, windowsFiles []archiveFile
+	hasLicense := false
+	if _, err := os.Stat(filepath.Join(binaryDir, licenseFile)); err == nil {
+		hasLicense = true
+	}
+
+	var linuxFiles, windowsFiles []binaryFile
 
 	for _, file := range files {
 		name := filepath.Base(file)
@@ -174,20 +160,21 @@ func listBinaries(w http.ResponseWriter, _ *http.Request) {
 		osName, arch := parsePlatform(name)
 		checksum := readChecksum(file)
 
-		af := archiveFile{Name: name, Size: size, OS: osName, Arch: arch, Checksum: checksum}
+		bf := binaryFile{Name: name, Size: size, OS: osName, Arch: arch, Checksum: checksum}
 
 		switch osName {
 		case "linux":
-			linuxFiles = append(linuxFiles, af)
+			linuxFiles = append(linuxFiles, bf)
 		case "windows":
-			windowsFiles = append(windowsFiles, af)
+			windowsFiles = append(windowsFiles, bf)
 		}
 	}
 
 	data := struct {
-		LinuxFiles   []archiveFile
-		WindowsFiles []archiveFile
-	}{linuxFiles, windowsFiles}
+		LinuxFiles   []binaryFile
+		WindowsFiles []binaryFile
+		HasLicense   bool
+	}{linuxFiles, windowsFiles, hasLicense}
 
 	w.Header().Set("Content-Type", "text/html")
 
@@ -199,18 +186,18 @@ func listBinaries(w http.ResponseWriter, _ *http.Request) {
 func downloadBinary(w http.ResponseWriter, r *http.Request) {
 	filename := filepath.Base(r.URL.Path[len("/download/"):])
 
-	// Security: only allow known file prefixes and the checksum file.
+	// Security: only allow known file prefixes and the LICENSE file.
 	if filepath.Dir(filename) != "." {
 		http.Error(w, "Invalid filename", http.StatusBadRequest)
 		return
 	}
 
-	if !strings.HasPrefix(filename, binaryPrefix) && filename != checksumFile {
+	if !strings.HasPrefix(filename, binaryPrefix) && filename != licenseFile {
 		http.Error(w, "Invalid filename", http.StatusBadRequest)
 		return
 	}
 
-	filePath := filepath.Join(archiveDir, filename)
+	filePath := filepath.Join(binaryDir, filename)
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		http.Error(w, "File not found", http.StatusNotFound)
@@ -219,7 +206,7 @@ func downloadBinary(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
 
-	if filename == checksumFile {
+	if filename == licenseFile {
 		w.Header().Set("Content-Type", "text/plain")
 	} else {
 		w.Header().Set("Content-Type", "application/octet-stream")
