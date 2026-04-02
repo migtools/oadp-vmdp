@@ -38,7 +38,7 @@ jobs:
       with:
         go-version-file: 'go.mod'
     - name: Setup
-      run: make -j4 ci-setup
+      run: make -j4 go-modules all-tools
     - name: Test Blob Index Manager V0
       run: make test-index-blob-v0
     - name: Tests
