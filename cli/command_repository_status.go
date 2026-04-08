@@ -42,8 +42,7 @@ type RepositoryStatus struct {
 }
 
 func (c *commandRepositoryStatus) setup(svc advancedAppServices, parent commandParent) {
-	// OADP: Updated terminology
-	cmd := parent.Command("status", "Display the status of connected BSL.")
+	cmd := parent.Command("status", "Display the status of connected repository.")
 	cmd.Flag("reconnect-token", "Display reconnect command").Short('t').BoolVar(&c.statusReconnectToken)
 	cmd.Flag("reconnect-token-with-password", "Include password in reconnect token").Short('s').BoolVar(&c.statusReconnectTokenIncludePassword)
 	cmd.Action(svc.repositoryReaderAction(c.run))

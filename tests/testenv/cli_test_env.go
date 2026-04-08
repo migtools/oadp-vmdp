@@ -106,8 +106,7 @@ func NewCLITest(tb testing.TB, repoCreateFlags []string, runner CLIRunner) *CLIT
 		fixedArgs:                    fixedArgs,
 		DefaultRepositoryCreateFlags: formatFlags,
 		Environment: map[string]string{
-			// OADP: Changed from KOPIA_PASSWORD to BSLS_PASSWORD
-			"BSLS_PASSWORD": TestRepoPassword,
+			"KOPIA_PASSWORD": TestRepoPassword,
 		},
 		Runner: runner,
 	}
@@ -283,26 +282,9 @@ func (e *CLITest) RunAndVerifyOutputLineCount(tb testing.TB, wantLines int, args
 func (e *CLITest) cmdArgs(args []string) []string {
 	var suffix []string
 
-	// OADP: Translate old command names to new ones for test compatibility.
-	// This allows existing tests to work without modification.
-	translatedArgs := make([]string, len(args))
-
-	for i, arg := range args {
-		switch arg {
-		case "repo", "repository":
-			translatedArgs[i] = "bsl"
-		case "snapshot", "snap":
-			translatedArgs[i] = "backup"
-		default:
-			translatedArgs[i] = arg
-		}
-	}
-
-	args = translatedArgs
-
 	// detect repository creation and override DefaultRepositoryCreateFlags for best
 	// performance on the current platform.
-	if len(args) >= 2 && (args[0] == "bsl" && args[1] == "create") {
+	if len(args) >= 2 && (args[0] == "repo" && args[1] == "create") {
 		suffix = e.DefaultRepositoryCreateFlags
 	}
 

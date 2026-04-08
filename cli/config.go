@@ -45,8 +45,7 @@ func (c *App) openRepository(ctx context.Context, required bool) (repo.Repositor
 			return nil, nil
 		}
 
-		// OADP: Updated error message for BSL terminology
-		return nil, errors.New("not connected to a Backup Storage Location (BSL). Use 'oadp-vmdp bsl connect' or 'oadp-vmdp bsl create'")
+		return nil, errors.New("repository is not connected. See https://kopia.io/docs/repositories/")
 	}
 
 	c.maybePrintUpdateNotification(ctx)
@@ -58,8 +57,7 @@ func (c *App) openRepository(ctx context.Context, required bool) (repo.Repositor
 
 	r, err := repo.Open(ctx, c.repositoryConfigFileName(), pass, c.optionsFromFlags(ctx))
 	if os.IsNotExist(err) {
-		// OADP: Updated error message for BSL terminology
-		return nil, errors.New("not connected to a BSL, use 'oadp-vmdp bsl connect'")
+		return nil, errors.New("not connected to a repository, use 'kopia connect'")
 	}
 
 	return r, errors.Wrap(err, "unable to open repository")
