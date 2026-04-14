@@ -2,8 +2,6 @@ module github.com/kopia/kopia
 
 go 1.25.0
 
-toolchain go1.25.8
-
 require (
 	cloud.google.com/go/storage v1.57.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.20.0
