@@ -38,6 +38,7 @@ RUN mkdir -p /archives && \
             . ; \
         sha256sum /archives/$out_name > /archives/$out_name.sha256; \
     done && \
+    chmod -x /archives/oadp-vmdp_* && \
     cp LICENSE /archives/LICENSE && \
     rm -rf /root/.cache/go-build /tmp/*
 
