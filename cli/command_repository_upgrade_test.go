@@ -1,5 +1,3 @@
-//go:build !oadp
-
 package cli_test
 
 import (

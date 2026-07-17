@@ -1,7 +1,6 @@
 COVERAGE_PACKAGES=./repo/...,./fs/...,./snapshot/...,./cli/...,./internal/...,./notification/...
 TEST_FLAGS?=
-# OADP: Renamed from kopia to oadp-vmdp
-KOPIA_INTEGRATION_EXE=$(CURDIR)/dist/testing_$(GOOS)_$(GOARCH)/oadp-vmdp.exe
+KOPIA_INTEGRATION_EXE=$(CURDIR)/dist/testing_$(GOOS)_$(GOARCH)/kopia.exe
 TESTING_ACTION_EXE=$(CURDIR)/dist/testing_$(GOOS)_$(GOARCH)/testingaction.exe
 FIO_DOCKER_TAG=ljishen/fio
 REPEAT_TEST=1
@@ -17,28 +16,30 @@ all:
 
 include tools/tools.mk
 
-# OADP: Renamed from kopia to oadp-vmdp
-kopia_ui_embedded_exe=dist/oadp-vmdp_$(GOOS)_$(GOARCH)/oadp-vmdp$(exe_suffix)
+KOPIA_BUILD_TAGS=
+KOPIA_BUILD_FLAGS=-trimpath -ldflags "-s -w -X github.com/kopia/kopia/repo.BuildVersion=$(KOPIA_VERSION_NO_PREFIX) -X github.com/kopia/kopia/repo.BuildInfo=$(shell git rev-parse HEAD) -X github.com/kopia/kopia/repo.BuildGitHubRepo=$(GITHUB_REPOSITORY)"
+
+kopia_ui_embedded_exe=dist/kopia_$(GOOS)_$(GOARCH)/kopia$(exe_suffix)
 
 ifeq ($(GOOS),darwin)
-	# on macOS, uses universal binary that works for AMD64 and ARM64
-	kopia_ui_embedded_exe=dist/oadp-vmdp_darwin_universal/oadp-vmdp
+	# on macOS, Kopia uses universal binary that works for AMD64 and ARM64
+	kopia_ui_embedded_exe=dist/kopia_darwin_universal/kopia
 endif
 
 ifeq ($(GOOS),linux)
 
 ifeq ($(GOARCH),arm)
-	kopia_ui_embedded_exe=dist/oadp-vmdp_linux_armv7l/oadp-vmdp
+	kopia_ui_embedded_exe=dist/kopia_linux_armv7l/kopia
 endif
 
 ifeq ($(GOARCH),amd64)
-	kopia_ui_embedded_exe=dist/oadp-vmdp_linux_x64/oadp-vmdp
+	kopia_ui_embedded_exe=dist/kopia_linux_x64/kopia
 endif
 
 endif
 
 GOTESTSUM_FORMAT=pkgname-and-test-fails
-GOTESTSUM_FLAGS=--format=$(GOTESTSUM_FORMAT) --no-summary=skipped
+GOTESTSUM_FLAGS=--format=$(GOTESTSUM_FORMAT) --hide-summary=output,skipped
 GO_TEST?=$(gotestsum) $(GOTESTSUM_FLAGS) --
 
 LINTER_DEADLINE=1200s
@@ -86,13 +87,19 @@ endif
 lint-and-log: $(linter)
 	$(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags) | tee .linterr.txt
 
-lint-all: $(linter)
+lint-windows: $(linter)
 	GOOS=windows GOARCH=amd64 $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
+
+lint-darwin: $(linter)
+	GOOS=darwin GOARCH=amd64 $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
+	GOOS=darwin GOARCH=arm64 $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
+
+lint-linux: $(linter)
 	GOOS=linux GOARCH=amd64 $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
 	GOOS=linux GOARCH=arm64 $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
 	GOOS=linux GOARCH=arm $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
-	GOOS=darwin GOARCH=amd64 $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
-	GOOS=darwin GOARCH=arm64 $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
+
+lint-all: $(linter) lint-windows lint-darwin lint-linux
 	GOOS=openbsd GOARCH=amd64 $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
 	GOOS=freebsd GOARCH=amd64 $(linter) --timeout $(LINTER_DEADLINE) run $(linter_flags)
 
@@ -276,17 +283,17 @@ dev-deps:
 test-with-coverage: export KOPIA_COVERAGE_TEST=1
 test-with-coverage: export TESTING_ACTION_EXE ?= $(TESTING_ACTION_EXE)
 test-with-coverage: $(gotestsum) $(TESTING_ACTION_EXE)
-	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing,oadp -count=$(REPEAT_TEST) -short -covermode=atomic -coverprofile=coverage.txt --coverpkg $(COVERAGE_PACKAGES) -timeout $(UNIT_TESTS_TIMEOUT) ./...
+	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing -count=$(REPEAT_TEST) -short -covermode=atomic -coverprofile=coverage.txt --coverpkg $(COVERAGE_PACKAGES) -timeout $(UNIT_TESTS_TIMEOUT) ./...
 
-test: GOTESTSUM_FLAGS=--format=$(GOTESTSUM_FORMAT) --no-summary=skipped --jsonfile=.tmp.unit-tests.json
+test: GOTESTSUM_FLAGS=--format=$(GOTESTSUM_FORMAT) --no-summary=output --jsonfile=.tmp.unit-tests.json
 test: export TESTING_ACTION_EXE ?= $(TESTING_ACTION_EXE)
 test: $(gotestsum) $(TESTING_ACTION_EXE)
-	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing,oadp -count=$(REPEAT_TEST) -timeout $(UNIT_TESTS_TIMEOUT) -skip '^TestIndexBlobManagerStress$$' ./...
+	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing -count=$(REPEAT_TEST) -timeout $(UNIT_TESTS_TIMEOUT) -skip '^TestIndexBlobManagerStress$$' ./...
 	-$(gotestsum) tool slowest --jsonfile .tmp.unit-tests.json  --threshold 1000ms
 
-test-index-blob-v0: GOTESTSUM_FLAGS=--format=pkgname --no-summary=output,skipped
+test-index-blob-v0: GOTESTSUM_FLAGS=--format=pkgname --no-summary=output
 test-index-blob-v0: $(gotestsum) $(TESTING_ACTION_EXE)
-	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing,oadp -count=$(REPEAT_TEST) -timeout $(UNIT_TESTS_TIMEOUT)  -run '^TestIndexBlobManagerStress$$' ./repo/content/indexblob/...
+	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -tags testing -count=$(REPEAT_TEST) -timeout $(UNIT_TESTS_TIMEOUT)  -run '^TestIndexBlobManagerStress$$' ./repo/content/indexblob/...
 
 provider-tests-deps: $(gotestsum) $(rclone) $(MINIO_MC_PATH)
 
@@ -294,30 +301,32 @@ PROVIDER_TEST_TARGET=...
 
 provider-tests: export KOPIA_PROVIDER_TEST=true
 provider-tests: export RCLONE_EXE=$(rclone)
-provider-tests: GOTESTSUM_FLAGS=--format=$(GOTESTSUM_FORMAT) --no-summary=skipped --jsonfile=.tmp.provider-tests.json
+provider-tests: GOTESTSUM_FLAGS=--format=$(GOTESTSUM_FORMAT) --no-summary=output --jsonfile=.tmp.provider-tests.json
 provider-tests: $(gotestsum) $(rclone) $(MINIO_MC_PATH)
 	$(GO_TEST) $(UNIT_TEST_RACE_FLAGS) -count=$(REPEAT_TEST) -timeout 15m ./repo/blob/$(PROVIDER_TEST_TARGET)
 	-$(gotestsum) tool slowest --jsonfile .tmp.provider-tests.json  --threshold 1000ms
 
 ALLOWED_LICENSES=Apache-2.0;MIT;BSD-2-Clause;BSD-3-Clause;CC0-1.0;ISC;MPL-2.0;CC-BY-3.0;CC-BY-4.0;ODC-By-1.0;WTFPL;0BSD;Python-2.0;BSD;Unlicense
 
-license-check: $(wwhrd) app-node-modules
+license-check-go: $(wwhrd)
 	$(wwhrd) check
+
+license-check: license-check-go app-node-modules
 	(cd app && npx license-checker --summary --production --onlyAllow "$(ALLOWED_LICENSES)")
 
 vtest: $(gotestsum)
 	$(GO_TEST) -count=$(REPEAT_TEST) -short -v -timeout $(UNIT_TESTS_TIMEOUT) ./...
 
 build-integration-test-binary:
-	go build $(KOPIA_BUILD_FLAGS) $(INTEGRATION_TEST_RACE_FLAGS) -o $(KOPIA_INTEGRATION_EXE) -tags testing,oadp github.com/kopia/kopia
+	go build $(KOPIA_BUILD_FLAGS) $(INTEGRATION_TEST_RACE_FLAGS) -o $(KOPIA_INTEGRATION_EXE) -tags testing github.com/kopia/kopia
 
 $(TESTING_ACTION_EXE): tests/testingaction/main.go
-	go build -o $(TESTING_ACTION_EXE) -tags testing,oadp github.com/kopia/kopia/tests/testingaction
+	go build -o $(TESTING_ACTION_EXE) -tags testing github.com/kopia/kopia/tests/testingaction
 
 compat-tests: export KOPIA_CURRENT_EXE=$(CURDIR)/$(kopia_ui_embedded_exe)
 compat-tests: export KOPIA_08_EXE=$(kopia08)
 compat-tests: export KOPIA_017_EXE=$(kopia017)
-compat-tests: GOTESTSUM_FLAGS=--format=testname --no-summary=skipped --jsonfile=.tmp.compat-tests.json
+compat-tests: GOTESTSUM_FLAGS=--format=testname --no-summary=output --jsonfile=.tmp.compat-tests.json
 compat-tests: $(kopia_ui_embedded_exe) $(kopia08) $(kopia017) $(gotestsum)
 	$(GO_TEST) $(TEST_FLAGS) -count=$(REPEAT_TEST) -parallel $(PARALLEL) -timeout 3600s github.com/kopia/kopia/tests/compat_test
 	#  -$(gotestsum) tool slowest --jsonfile .tmp.compat-tests.json  --threshold 1000ms
@@ -384,8 +393,9 @@ ifneq ($(GOOS),windows)
 	             -e github.com/kopia/kopia/issues && exit 1 || echo repo/ layering ok
 endif
 
+htmlui-e2e-test: GOTESTSUM_FORMAT=testname
 htmlui-e2e-test:
-	HTMLUI_E2E_TEST=1 go test -timeout 600s github.com/kopia/kopia/tests/htmlui_e2e_test -v $(TEST_FLAGS)
+	HTMLUI_E2E_TEST=1 $(GO_TEST) -timeout 600s github.com/kopia/kopia/tests/htmlui_e2e_test -v $(TEST_FLAGS)
 
 htmlui-e2e-test-local-htmlui-changes:
 	(cd ../htmlui && npm run build)

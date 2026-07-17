@@ -20,6 +20,7 @@ import (
 	htpasswd "github.com/tg123/go-htpasswd"
 
 	"github.com/kopia/kopia/internal/auth"
+	"github.com/kopia/kopia/internal/insecureserverbind"
 	"github.com/kopia/kopia/internal/server"
 	"github.com/kopia/kopia/notification"
 	"github.com/kopia/kopia/notification/sender/jsonsender"
@@ -75,6 +76,8 @@ type commandServerStart struct {
 
 	logServerRequests bool
 
+	serverStartAllowDangerousUnauthenticatedNetwork bool
+
 	disableCSRFTokenChecks bool // disable CSRF token checks - used for development/debugging only
 
 	sf  serverFlags
@@ -94,15 +97,19 @@ func (c *commandServerStart) setup(svc advancedAppServices, parent commandParent
 	cmd.Flag("insecure", "Allow insecure configurations (do not use in production)").Hidden().BoolVar(&c.serverStartInsecure)
 	cmd.Flag("max-concurrency", "Maximum number of server goroutines").Default("0").IntVar(&c.serverStartMaxConcurrency)
 
+	cmd.Flag(insecureserverbind.AllowDangerousUnauthenticatedNetworkFlag, insecureserverbind.AllowDangerousUnauthenticatedNetworkFlagHelp).
+		Hidden().
+		BoolVar(&c.serverStartAllowDangerousUnauthenticatedNetwork)
+
 	cmd.Flag("without-password", "Start the server without a password").Hidden().BoolVar(&c.serverStartWithoutPassword)
 	cmd.Flag("random-password", "Generate random password and print to stderr").Hidden().BoolVar(&c.serverStartRandomPassword)
 	cmd.Flag("htpasswd-file", "Path to htpasswd file that contains allowed user@hostname entries").Hidden().ExistingFileVar(&c.serverStartHtpasswdFile)
 
 	cmd.Flag("random-server-control-password", "Generate random server control password and print to stderr").Hidden().BoolVar(&c.randomServerControlPassword)
-	cmd.Flag("server-control-username", "Server control username").Default(defaultServerControlUsername).Envar(svc.EnvName("OADP_SERVER_CONTROL_USER")).StringVar(&c.serverControlUsername)
-	cmd.Flag("server-control-password", "Server control password").PlaceHolder("PASSWORD").Envar(svc.EnvName("OADP_SERVER_CONTROL_PASSWORD")).StringVar(&c.serverControlPassword)
+	cmd.Flag("server-control-username", "Server control username").Default(defaultServerControlUsername).Envar(svc.EnvName("KOPIA_SERVER_CONTROL_USER")).StringVar(&c.serverControlUsername)
+	cmd.Flag("server-control-password", "Server control password").PlaceHolder("PASSWORD").Envar(svc.EnvName("KOPIA_SERVER_CONTROL_PASSWORD")).StringVar(&c.serverControlPassword)
 
-	cmd.Flag("auth-cookie-signing-key", "Force particular auth cookie signing key").Envar(svc.EnvName("OADP_AUTH_COOKIE_SIGNING_KEY")).Hidden().StringVar(&c.serverAuthCookieSingingKey)
+	cmd.Flag("auth-cookie-signing-key", "Force particular auth cookie signing key").Envar(svc.EnvName("KOPIA_AUTH_COOKIE_SIGNING_KEY")).Hidden().StringVar(&c.serverAuthCookieSingingKey)
 	cmd.Flag("log-scheduler", "Enable logging of scheduler actions").Hidden().Default("true").BoolVar(&c.debugScheduler)
 	cmd.Flag("min-maintenance-interval", "Minimum maintenance interval").Hidden().Default("60s").DurationVar(&c.minMaintenanceInterval)
 
@@ -118,7 +125,7 @@ func (c *commandServerStart) setup(svc advancedAppServices, parent commandParent
 
 	cmd.Flag("async-repo-connect", "Connect to repository asynchronously").Hidden().BoolVar(&c.asyncRepoConnect)
 	cmd.Flag("persistent-logs", "Persist logs in a file").Default("true").BoolVar(&c.persistentLogs)
-	cmd.Flag("ui-title-prefix", "UI title prefix").Hidden().Envar(svc.EnvName("OADP_UI_TITLE_PREFIX")).StringVar(&c.uiTitlePrefix)
+	cmd.Flag("ui-title-prefix", "UI title prefix").Hidden().Envar(svc.EnvName("KOPIA_UI_TITLE_PREFIX")).StringVar(&c.uiTitlePrefix)
 	cmd.Flag("ui-preferences-file", "Path to JSON file storing UI preferences").StringVar(&c.uiPreferencesFile)
 
 	cmd.Flag("log-server-requests", "Log server requests").Hidden().BoolVar(&c.logServerRequests)
@@ -190,6 +197,15 @@ func (c *commandServerStart) initRepositoryPossiblyAsync(ctx context.Context, sr
 }
 
 func (c *commandServerStart) run(ctx context.Context) (reterr error) {
+	if err := insecureserverbind.ValidateListenAddressIfRestricted(
+		c.serverStartInsecure,
+		c.serverStartWithoutPassword,
+		c.serverStartAllowDangerousUnauthenticatedNetwork,
+		c.sf.serverAddress,
+	); err != nil {
+		return errors.Wrap(err, "listen address not allowed for insecure server without password")
+	}
+
 	opts, err := c.serverStartOptions(ctx)
 	if err != nil {
 		return err

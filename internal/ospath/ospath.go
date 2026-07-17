@@ -16,14 +16,12 @@ var (
 
 // ConfigDir returns the directory where configuration data (possibly roaming) needs to be stored.
 func ConfigDir() string {
-	// OADP: Changed from "kopia" to "oadp"
-	return filepath.Join(userSettingsDir, "oadp")
+	return filepath.Join(userSettingsDir, "kopia")
 }
 
 // LogsDir returns the directory where per-user logs should be written.
 func LogsDir() string {
-	// OADP: Changed from "kopia" to "oadp"
-	return filepath.Join(userLogsDir, "oadp")
+	return filepath.Join(userLogsDir, "kopia")
 }
 
 // IsAbs determines if a given path is absolute, in particular treating \\hostname\share as absolute on Windows.

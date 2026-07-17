@@ -42,8 +42,7 @@ type RepositoryStatus struct {
 }
 
 func (c *commandRepositoryStatus) setup(svc advancedAppServices, parent commandParent) {
-	// OADP: Updated terminology
-	cmd := parent.Command("status", "Display the status of connected BSL.")
+	cmd := parent.Command("status", "Display the status of connected repository.")
 	cmd.Flag("reconnect-token", "Display reconnect command").Short('t').BoolVar(&c.statusReconnectToken)
 	cmd.Flag("reconnect-token-with-password", "Include password in reconnect token").Short('s').BoolVar(&c.statusReconnectTokenIncludePassword)
 	cmd.Action(svc.repositoryReaderAction(c.run))
@@ -212,7 +211,7 @@ func (c *commandRepositoryStatus) run(ctx context.Context, rep repo.Repository) 
 		c.out.printStdout("Epoch refresh frequency: %v\n", mp.EpochParameters.EpochRefreshFrequency)
 		c.out.printStdout("Epoch advance on:        %v blobs or %v, minimum %v\n", mp.EpochParameters.EpochAdvanceOnCountThreshold, units.BytesString(mp.EpochParameters.EpochAdvanceOnTotalSizeBytesThreshold), mp.EpochParameters.MinEpochDuration)
 		c.out.printStdout("Epoch cleanup margin:    %v\n", mp.EpochParameters.CleanupSafetyMargin)
-		c.out.printStdout("Epoch checkpoint every:  %v epochs\n", mp.EpochParameters.FullCheckpointFrequency)
+		c.out.printStdout("Epoch range-compaction every: %v epochs\n", mp.EpochParameters.FullCheckpointFrequency)
 	} else {
 		c.out.printStdout("Epoch Manager:       disabled\n")
 	}
