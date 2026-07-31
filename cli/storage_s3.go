@@ -136,3 +136,11 @@ func normalizeOADPPrefix(userPrefix string) (string, error) {
 
 	return oadpPrefix + cleanedPrefix, nil
 }
+
+func init() {
+	mustRegisterStorageProvider(
+		"s3",
+		"an S3 bucket",
+		func() StorageFlags { return &storageS3Flags{} },
+	)
+}
