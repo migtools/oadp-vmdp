@@ -55,8 +55,8 @@ ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 ARG BUILDTAGS=
 
-# Install git for version detection (if not passed via args)
-RUN apk add --no-cache git
+# Install build dependencies: git for version detection, gcc/musl-dev for CGO
+RUN apk add --no-cache git gcc musl-dev
 
 WORKDIR /build
 
@@ -67,11 +67,11 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary with static linking
-# CGO_ENABLED=0 ensures a fully static binary that works on any Linux distro
+# Build the binary with CGO enabled and static linking via musl
+# CGO_ENABLED=1 with musl on Alpine produces a statically-linked binary
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build \
         -trimpath \
         -mod=mod \
