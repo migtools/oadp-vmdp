@@ -196,6 +196,12 @@ linters:
       - path: repo/blob/azure/patch\.go
         linters:
           - revive
+      # OADP: pre-existing package names (fs, crypto, hmac, user) inherited from
+      # upstream kopia conflict with stdlib package names; renaming would require
+      # updating every import site across the codebase, out of scope here.
+      - text: "var-naming: avoid package names that conflict with Go standard library package names"
+        linters:
+          - revive
       - path: reporter.go
         linters:
           - musttag
