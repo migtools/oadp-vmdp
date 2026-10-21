@@ -141,6 +141,12 @@ linters:
       - path: cli/storage_(azure|b2|gcs|gdrive|rclone|sftp|webdav)\.go
         linters:
           - unused
+      # OADP: NewApp uses a fixed list of storage providers (see cli/app.go), so the
+      # upstream registry accessor is intentionally left unused.
+      - path: cli/storage_providers\.go
+        text: "func getRegisteredStorageProviders is unused"
+        linters:
+          - unused
       - path: cli/throttle_(get|set)\.go
         linters:
           - unused
