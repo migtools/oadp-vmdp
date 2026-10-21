@@ -33,14 +33,14 @@ var (
 	// defaultLoggingPolicy is the default logs policy.
 	defaultLoggingPolicy = LoggingPolicy{
 		Directories: DirLoggingPolicy{
-			Snapshotted: NewLogDetail(LogDetailNormal),
-			Ignored:     NewLogDetail(LogDetailNormal),
+			Snapshotted: new(LogDetailNormal),
+			Ignored:     new(LogDetailNormal),
 		},
 		Entries: EntryLoggingPolicy{
-			Snapshotted: NewLogDetail(LogDetailNone),
-			Ignored:     NewLogDetail(LogDetailNormal),
-			CacheHit:    NewLogDetail(LogDetailNone),
-			CacheMiss:   NewLogDetail(LogDetailNone),
+			Snapshotted: new(LogDetailNone),
+			Ignored:     new(LogDetailNormal),
+			CacheHit:    new(LogDetailNone),
+			CacheMiss:   new(LogDetailNone),
 		},
 	}
 
@@ -60,7 +60,7 @@ var (
 
 	defaultOSSnapshotPolicy = OSSnapshotPolicy{
 		VolumeShadowCopy: VolumeShadowCopyPolicy{
-			Enable: NewOSSnapshotMode(OSSnapshotNever),
+			Enable: new(OSSnapshotNever),
 		},
 	}
 

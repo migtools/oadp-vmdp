@@ -8,7 +8,7 @@ import (
 
 func TestOSSnapshotMode(t *testing.T) {
 	assert.Equal(t, OSSnapshotNever, (*OSSnapshotMode)(nil).OrDefault(OSSnapshotNever))
-	assert.Equal(t, OSSnapshotAlways, NewOSSnapshotMode(OSSnapshotAlways).OrDefault(OSSnapshotNever))
+	assert.Equal(t, OSSnapshotAlways, new(OSSnapshotAlways).OrDefault(OSSnapshotNever))
 
 	cases := []struct {
 		m OSSnapshotMode
