@@ -2,7 +2,7 @@
 # Dependencies are prefetched by the Konflux pipeline (Hermeto) and injected
 # into the build context before this Containerfile runs.
 
-FROM brew.registry.redhat.io/rh-osbs/openshift-golang-builder:rhel_9_golang_1.26 AS builder
+FROM registry.redhat.io/openshift/golang-builder:golang-builder-v1.26-rhel9 AS builder
 
 COPY . /workspace
 WORKDIR /workspace
