@@ -27,7 +27,7 @@ RUN mkdir -p /archives && \
             out_name="oadp-vmdp_${os}_${arch}"; \
         fi; \
         echo "Building oadp-vmdp for ${os}/${arch}..."; \
-        CGO_ENABLED=0 GOOS=$os GOARCH=$arch \
+        CGO_ENABLED=1 GOOS=$os GOARCH=$arch \
             go build -trimpath -mod=mod \
             -tags="${BUILDTAGS}" \
             -ldflags="-s -w \
