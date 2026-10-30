@@ -1,5 +1,3 @@
-//go:build !oadp
-
 package endurance_test
 
 import (

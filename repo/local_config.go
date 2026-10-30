@@ -88,7 +88,7 @@ func (o ClientOptions) UsernameAtHost() string {
 	return o.Username + "@" + o.Hostname
 }
 
-// LocalConfig is a configuration of OADP-VMDP stored in a configuration file.
+// LocalConfig is a configuration of Kopia stored in a configuration file.
 type LocalConfig struct {
 	// APIServer is only provided for remote repository.
 	APIServer *APIServerInfo `json:"apiServer,omitempty"`
@@ -147,15 +147,14 @@ func LoadConfigFromFile(fileName string) (*LocalConfig, error) {
 			lc.Caching.CacheDirectory = filepath.Join(filepath.Dir(fileName), lc.Caching.CacheDirectory)
 		}
 
-		// OADP: override cache directory from the environment variable.
-		if cd := os.Getenv("OADP_CACHE_DIRECTORY"); cd != "" && ospath.IsAbs(cd) {
+		// override cache directory from the environment variable.
+		if cd := os.Getenv("KOPIA_CACHE_DIRECTORY"); cd != "" && ospath.IsAbs(cd) {
 			lc.Caching.CacheDirectory = cd
 		}
 	}
 
-	// OADP: Changed KOPIA_UPGRADE_LOCK_ENABLED to OADP_UPGRADE_LOCK_ENABLED
-	if lc.PermissiveCacheLoading && os.Getenv("OADP_UPGRADE_LOCK_ENABLED") == "" {
-		return nil, errors.New("must have set OADP_UPGRADE_LOCK_ENABLED when connecting to BSL with permissive cache loading")
+	if lc.PermissiveCacheLoading && os.Getenv("KOPIA_UPGRADE_LOCK_ENABLED") == "" {
+		return nil, errors.New("must have set KOPIA_UPGRADE_LOCK_ENABLED when connecting to repository with permissive cache loading")
 	}
 
 	return &lc, nil

@@ -102,7 +102,6 @@ var EditFile = func(ctx context.Context, file string) error {
 	editor, editorArgs := getEditorCommand()
 
 	var args []string
-
 	args = append(args, editorArgs...)
 	args = append(args, file)
 

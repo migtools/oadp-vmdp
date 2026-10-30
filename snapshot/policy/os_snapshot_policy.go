@@ -56,7 +56,7 @@ const (
 
 // NewOSSnapshotMode provides an OptionalBool pointer.
 func NewOSSnapshotMode(m OSSnapshotMode) *OSSnapshotMode {
-	return new(m)
+	return &m
 }
 
 // OrDefault returns the OS snapshot mode or the provided default.
