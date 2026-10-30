@@ -185,7 +185,6 @@ func (c *commandRepositorySyncTo) listDestinationBlobs(ctx context.Context, dst 
 		dstMetadata[bm.BlobID] = bm
 		dstTotalBytes += bm.Length
 		c.outputSyncProgress(fmt.Sprintf("  Found %v BLOBs in the destination repository (%v)", len(dstMetadata), units.BytesString(dstTotalBytes)))
-
 		return nil
 	}); err != nil {
 		return nil, errors.Wrap(err, "error listing BLOBs in destination repository")

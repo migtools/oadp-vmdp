@@ -17,8 +17,11 @@ import (
 	"github.com/kopia/kopia/snapshot/policy"
 )
 
-// OADP: Removed validation note since validate-provider command is not included.
-const runValidationNote = ``
+const runValidationNote = `NOTE: To validate that your provider is compatible with Kopia, please run:
+
+$ kopia repository validate-provider
+
+`
 
 type commandRepositoryCreate struct {
 	createBlockHashFormat             string
@@ -38,16 +41,14 @@ type commandRepositoryCreate struct {
 }
 
 func (c *commandRepositoryCreate) setup(svc advancedAppServices, parent commandParent) {
-	// OADP: Updated terminology
-	cmd := parent.Command("create", "Create new BSL in a specified location.")
+	cmd := parent.Command("create", "Create new repository in a specified location.")
 
 	cmd.Flag("block-hash", "Content hash algorithm.").PlaceHolder("ALGO").Default(hashing.DefaultAlgorithm).EnumVar(&c.createBlockHashFormat, hashing.SupportedAlgorithms()...)
 	cmd.Flag("encryption", "Content encryption algorithm.").PlaceHolder("ALGO").Default(encryption.DefaultAlgorithm).EnumVar(&c.createBlockEncryptionFormat, encryption.SupportedAlgorithms(false)...)
 	cmd.Flag("ecc", "[EXPERIMENTAL] Error correction algorithm.").PlaceHolder("ALGO").Default(ecc.DefaultAlgorithm).EnumVar(&c.createBlockECCFormat, ecc.SupportedAlgorithms()...)
 	cmd.Flag("ecc-overhead-percent", "[EXPERIMENTAL] How much space overhead can be used for error correction, in percentage. Use 0 to disable ECC.").Default("0").IntVar(&c.createBlockECCOverheadPercent)
 	cmd.Flag("object-splitter", "The splitter to use for new objects in the repository").Default(splitter.DefaultAlgorithm).EnumVar(&c.createSplitter, splitter.SupportedAlgorithms()...)
-	// OADP: Updated terminology
-	cmd.Flag("create-only", "Create BSL, but don't connect to it.").Short('c').BoolVar(&c.createOnly)
+	cmd.Flag("create-only", "Create repository, but don't connect to it.").Short('c').BoolVar(&c.createOnly)
 	cmd.Flag("format-version", "Force a particular repository format version (1, 2 or 3, 0==default)").IntVar(&c.createFormatVersion)
 	cmd.Flag("retention-mode", "Set the blob retention-mode for supported storage backends.").EnumVar(&c.retentionMode, blob.Governance.String(), blob.Compliance.String())
 	cmd.Flag("retention-period", "Set the blob retention-period for supported storage backends.").DurationVar(&c.retentionPeriod)
@@ -61,8 +62,7 @@ func (c *commandRepositoryCreate) setup(svc advancedAppServices, parent commandP
 	for _, prov := range svc.storageProviders() {
 		// Set up 'create' subcommand
 		f := prov.NewFlags()
-		// OADP: Updated terminology
-		cc := cmd.Command(prov.Name, "Create BSL in "+prov.Description)
+		cc := cmd.Command(prov.Name, "Create repository in "+prov.Description)
 		f.Setup(svc, cc)
 		cc.Action(func(kpc *kingpin.ParseContext) error {
 			return svc.runAppWithContext(kpc.SelectedCommand, func(ctx context.Context) error {
@@ -185,7 +185,7 @@ func (c *commandRepositoryCreate) populateRepository(ctx context.Context, passwo
 
 		c.out.printStdout("%v\n", alignedPolicyTableRows(rows))
 
-		// OADP: Removed policy command reference since policy command is not included
+		c.out.printStderr("\nTo find more information about default policy run 'kopia policy get'.\nTo change the policy use 'kopia policy set' command.\n")
 
 		if err := setDefaultMaintenanceParameters(ctx, w); err != nil {
 			return errors.Wrap(err, "unable to set maintenance parameters")

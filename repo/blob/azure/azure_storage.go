@@ -9,6 +9,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	azblobblob "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -272,7 +273,7 @@ func (az *azStorage) putBlob(ctx context.Context, b blob.ID, data blob.Bytes, op
 	metadata := make(map[string]*string, len(tsMetadata))
 
 	for k, v := range tsMetadata {
-		metadata[k] = new(v)
+		metadata[k] = to.Ptr(v)
 	}
 
 	uo := &azblockblob.UploadOptions{

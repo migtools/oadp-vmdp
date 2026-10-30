@@ -47,8 +47,7 @@ type commandCacheSetParams struct {
 }
 
 func (c *commandCacheSetParams) setup(svc appServices, parent commandParent) {
-	// OADP: Updated terminology
-	cmd := parent.Command("set", "Sets parameters for local caching of BSL data")
+	cmd := parent.Command("set", "Sets parameters local caching of repository data")
 
 	c.contentMinSweepAge = -1
 	c.metadataMinSweepAge = -1

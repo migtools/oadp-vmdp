@@ -20,22 +20,20 @@ import (
 )
 
 const (
-	// OADP: Changed from KOPIA_CHECK_FOR_UPDATES to OADP_CHECK_FOR_UPDATES.
-	checkForUpdatesEnvar = "OADP_CHECK_FOR_UPDATES"
+	checkForUpdatesEnvar = "KOPIA_CHECK_FOR_UPDATES"
 	githubTimeout        = 10 * time.Second
 )
 
 const (
 	latestReleaseGitHubURLFormat = "https://api.github.com/repos/%v/releases/latest"
 	checksumsURLFormat           = "https://github.com/%v/releases/download/%v/checksums.txt.sig"
-	// OADP: Updated notice messages.
-	autoUpdateNotice = `
-NOTICE: OADP-VMDP will check for updates on GitHub every 7 days, starting 24 hours after first use.
+	autoUpdateNotice             = `
+NOTICE: Kopia will check for updates on GitHub every 7 days, starting 24 hours after first use.
 To disable this behavior, set environment variable ` + checkForUpdatesEnvar + `=false
 Alternatively you can remove the file "%v".
 `
 	updateAvailableNoticeFormat = `
-Upgrade of OADP-VMDP from %v to %v is available.
+Upgrade of Kopia from %v to %v is available.
 Visit https://github.com/%v/releases/latest to download it.
 
 `

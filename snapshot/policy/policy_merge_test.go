@@ -33,7 +33,9 @@ func ensureTypesMatch(t *testing.T, policyType, definitionType reflect.Type) {
 
 	sourceInfoType := reflect.TypeFor[snapshot.SourceInfo]()
 
-	for f := range policyType.Fields() {
+	for i := range policyType.NumField() {
+		f := policyType.Field(i)
+
 		t.Run(definitionType.Name()+"_"+f.Name, func(t *testing.T) {
 			t.Logf("f: %v %v", definitionType.Name(), f.Name)
 
@@ -60,7 +62,9 @@ func TestPolicyMerge(t *testing.T) {
 
 //nolint:thelper
 func testPolicyMerge(t *testing.T, policyType, definitionType reflect.Type, prefix string) {
-	for f := range policyType.Fields() {
+	for i := range policyType.NumField() {
+		f := policyType.Field(i)
+
 		dt, ok := definitionType.FieldByName(f.Name)
 		if !ok {
 			continue

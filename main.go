@@ -1,11 +1,11 @@
 /*
-OADP VM Data Protection - Virtual Machine Data Protection for OpenShift Virtualization.
+Command-line tool for creating and accessing backups.
 
 Usage:
 
-	$ oadp-vmdp [<flags>] <subcommand> [<args> ...]
+	$ kopia [<flags>] <subcommand> [<args> ...]
 
-Use 'oadp-vmdp help' to see more details.
+Use 'kopia help' to see more details.
 */
 package main
 
@@ -65,7 +65,7 @@ Commands (use --help-full to list all commands):
 
 func main() {
 	app := cli.NewApp()
-	kp := kingpin.New(cli.AppName, cli.AppLongDescription).Author(cli.AppAuthor)
+	kp := kingpin.New("kopia", "Kopia - Fast And Secure Open-Source Backup").Author("http://kopia.github.io/")
 
 	kp.Version(repo.BuildVersion + " build: " + repo.BuildInfo + " from: " + repo.BuildGitHubRepo)
 	logfile.Attach(app, kp)
